@@ -1,0 +1,58 @@
+{
+  "name": "blue-random-electron",
+  "version": "26.08.01",
+  "description": "蔚蓝点名-仿《蔚蓝档案》学员招募的随机点名工具",
+  "author": "HydrogenRua",
+  "main": "dist-electron/main.js",
+  "build": {
+    "appId": "com.hydrogenrua.blue-random",
+    "productName": "Blue Random",
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "extraFiles": [
+      "THIRD_PARTY_NOTICES/RunUIAccess-MIT.txt"
+    ],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "zip",
+      "icon": "public/image/app.ico"
+    }
+  },
+  "scripts": {
+    "dev": "node build/prepare-uiaccess.js && vite",
+    "build": "node build/prepare-uiaccess.js && vite build && electron-builder",
+    "build:fast": "node build/prepare-uiaccess.js && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "build:vite": "node build/prepare-uiaccess.js && vite build",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.3.1",
+    "axios": "^1.15.0",
+    "js-yaml": "^4.1.0",
+    "koffi": "^3.1.6",
+    "riz-ui": "https://github.com/Yun-Hydrogen/riz-ui/archive/refs/heads/main.tar.gz",
+    "vue": "^3.5.17",
+    "vue-router": "^4.6.4"
+  },
+  "allowScripts": {
+    "riz-ui": true,
+    "esbuild": true,
+    "electron": true,
+    "electron-winstaller": true,
+    "koffi": true
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.5",
+    "cross-env": "^10.1.0",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
+    "vite": "^8.0.8",
+    "vite-plugin-electron": "^0.29.1",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  }
+}

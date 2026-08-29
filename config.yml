@@ -1,0 +1,45 @@
+# 抽取名单列表
+studentList: []
+allowRepeatDraw: true
+
+# 悬浮按钮配置
+floatingButton:
+  # 按钮大小百分比（基准 50px*50px），范围 0-1000，默认 100
+  sizePercent: 100
+  # 透明度百分比，范围 0-100（0=完全不透明，100=完全透明），默认 20
+  transparencyPercent: 20
+  # 是否置顶（true/false），默认 true
+  alwaysOnTop: true
+  # 悬浮按钮窗口位置（左上角屏幕坐标），退出时自动保存；null 表示使用系统默认位置
+  position:
+    x: 0
+    y: 0
+
+# 人数选择窗口配置
+pickCountDialog:
+  # 是否默认播放喜庆点名音乐（true/false），默认 false
+  defaultPlayMusic: false
+  # 背景变暗程度，范围 0-100（100 接近全黑），默认 50
+  backgroundDarknessPercent: 50
+  # 人数默认值，范围 1-10 的整数，默认 1
+  defaultCount: 1
+
+# 抽奖结果动画音效配置
+pickResultDialog:
+  # 是否默认播放抽奖音效（true/false），默认 true
+  defaultPlayGachaSound: true
+  # 抽奖音效音量（0.0-1.0），默认 0.6
+  gachaSoundVolume: 0.6
+
+# 高级设置（管理员权限 + 计划任务 + UIAccess）
+admin:
+  # 启用管理员置顶增强（Windows 下会尝试管理员权限）
+  adminTopmostEnabled: false
+  # 计划任务以管理员身份运行
+  adminAutoStartAdmin: true
+  # 计划任务运行的可执行文件路径（空=自动检测）
+  adminAutoStartPath: ""
+  # 计划任务名称
+  adminAutoStartTaskName: "Blue Random (Admin)"
+  # 启用 UIAccess 置顶
+  uiAccessEnabled: false

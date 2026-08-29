@@ -1,0 +1,107 @@
+name: Build Windows Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag (e.g. v1.2.3)
+        required: true
+      release_name:
+        description: Release name (optional)
+        required: false
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip build]')
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_BUILDER_CACHE: C:\\Users\\runneradmin\\AppData\\Local\\electron-builder\\Cache
+          ELECTRON_CACHE: C:\\Users\\runneradmin\\AppData\\Local\\electron\\Cache
+        run: npm run build
+
+      - name: Detect release mode
+        id: release_mode
+        shell: pwsh
+        env:
+          WORKFLOW_EVENT_NAME: ${{ github.event_name }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          RELEASE_NAME_INPUT: ${{ inputs.release_name }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $isPush = $env:WORKFLOW_EVENT_NAME -eq "push"
+          $message = if ($isPush) { $env:HEAD_COMMIT_MESSAGE } else { "" }
+          $isUnstable = $message -match "\[unstable\]"
+          if ($isUnstable) {
+            $tag = "preview-${{ github.run_number }}"
+            $name = "Preview ${{ github.run_number }}"
+            $prerelease = "true"
+          } else {
+            $tag = if ($isPush) { "v$version" } else { $env:RELEASE_TAG_INPUT }
+            $name = if ($isPush) { "v$version" } else { $env:RELEASE_NAME_INPUT }
+            $prerelease = "false"
+          }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "prerelease=$prerelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Generate version metadata
+        shell: pwsh
+        env:
+          WORKFLOW_EVENT_NAME: ${{ github.event_name }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $commit = "${{ github.sha }}"
+          $isPush = $env:WORKFLOW_EVENT_NAME -eq "push"
+          $message = if ($isPush) { $env:HEAD_COMMIT_MESSAGE } else { "" }
+          $type = if ($message -match "\[unstable\]") { "preview" } else { "stable" }
+          $content = @"
+          version: "$version"
+          commit: "$commit"
+          type: "$type"
+          "@
+          $content | Out-File -FilePath dist\version.yml -Encoding utf8
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: |
+            dist\*.zip
+            dist\version.yml
+          if-no-files-found: error
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_mode.outputs.tag }}
+          name: ${{ steps.release_mode.outputs.name }}
+          prerelease: ${{ steps.release_mode.outputs.prerelease }}
+          files: |
+            dist/*.zip
+            dist/version.yml
