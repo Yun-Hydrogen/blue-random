@@ -75,6 +75,12 @@
                 外部清理工具误删，缓存可长期复用
               - 新增“高级设置 → 清理缓存”入口（config-panel:clear-cache），
                 可手动删除该目录释放空间
+  2026-09-06  安全修复（CodeQL js/incomplete-sanitization）：
+              - buildUiAccessCommandLine：引号转义改为 Windows CommandLineToArgvW
+                规则（反斜杠 + 双引号组合转义），不再简单 replace('"','\\"')
+              - createAdminStartupTask：PowerShell 提权不再拼接 -Command 字符串，
+                改为临时 .ps1 + 单引号数组 $argList + Start-Process -ArgumentList
+                $argList（执行后 finally 删除临时脚本）
 ================================================================================
 */
 const { app } = require('electron');

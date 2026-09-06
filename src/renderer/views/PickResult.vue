@@ -92,8 +92,11 @@
   - stagePhase 状态机是核心：所有动画/交互都依赖阶段判断，修改需全局审视
   - token 由主进程下发，用于判断 onOpen 事件是否过期（快速连续抽取时）
   - sessionSeed 自增生成 activeSessionId，确保旧计时器不会误伤新会话
-  - .result-panel 使用 @click.stop 阻止冒泡（点击面板内部不触发关闭）
-  - BGM 淡入淡出逻辑见 playBgm/stopBgm/cancelFade 三函数的详细注释
+  - .result-panel 使用 @click.stop 阻止冒泡（点击面板内部不触发关闭）；
+    舞台空白点击关闭由根节点 handleStageClick 处理
+  - 音频资源（gachaAudio/musicAudio）在 closeResult 中由 releaseAudio()
+    释放（pause + 清空 src + 置空引用），防止 data URL 常驻内存
+  - 不加回 backdrop-filter：全屏透明窗口毛玻璃是 GPU/共享内存暴涨主因
 
 ================================================================================
   七、更新记录

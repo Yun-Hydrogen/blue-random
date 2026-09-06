@@ -152,7 +152,11 @@
       清除所有配置（forgetReset）
     - TabAdvanced 新增 :security-enabled prop 绑定与 @security-changed 刷新
 
-  最后更新：2026-08-29
+  2026-09-06
+    - 更新检查结果新增 :update-release-url prop 透传给 TabAdvanced：
+      无论是否有更新，结果区均显示“跳转至GitHub”按钮（riz-ui openURL）
+
+  最后更新：2026-09-06
 ================================================================================
 -->
 <template>

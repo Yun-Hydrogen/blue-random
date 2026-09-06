@@ -672,8 +672,10 @@ function setMaxCount()   { if (count.value !== MAX_COUNT) { count.value = MAX_CO
 //  方案 A（setIgnoreMouseEvents + forward 转发）实测：D3D9 下
 //  forward 转发的 mousemove 不可用 → 窗口一直穿透、完全无法点击。
 //  回退到 setShape（SetWindowRgn）：
-//    收缩态：正方形外接按钮圆（边长 = sizePx + 4，刚好卡在按钮边缘）
+//    收缩态：正方形外接按钮圆（边长 = sizePx + pad*2，每边 pad 容差）
 //    展开态：一个矩形刚好包住 按钮 + 胶囊 + X/✓（紧贴各控件外缘）
+//  所有矩形经 buildRect() 外扩式取整（左上 floor / 右下 ceil），
+//  并在 applyShape 中统一加 pad=3 容差，吸收亚像素与 DPI 舍入差。
 //  矩形外区域自动穿透鼠标事件，零性能开销。
 //  注意：SetWindowRgn 会裁剪显示内容，收起时需等 CSS leave 动画播完
 //        （~220ms）再切小矩形，避免控件被裁断。

@@ -16,7 +16,7 @@
                    | UIAccess 置顶（仅当上方的开关开启时显示）
     3. 渲染后端    | 图形后端选择（d3d9/vulkan）、禁用直接合成、放弃 GPU 加速
     4. 配置管理    | 配置文件路径展示、打开目录、清理缓存、重置配置（二次确认）、重启
-    5. 检查更新    | 从 GitHub Releases 拉取最新版本信息
+    5. 检查更新    | 从 GitHub Releases 拉取最新版本信息，并提供“跳转至GitHub”按钮
 
 ================================================================================
   二、数据流架构
@@ -40,6 +40,7 @@
   │    updateStatus   — 更新状态字符串（update / error / ''）   │
   │    updateTitle    — 更新结果标题                            │
   │    updateDetail   — 更新结果详情                            │
+  │    updateReleaseUrl — GitHub Releases 页链接（控制跳转按钮显隐）│
   │                                                             │
   │  Emits 发送：                                               │
   │    update:admin       — 修改高级设置（Vue v-model 协议）    │
@@ -66,6 +67,8 @@
   - 文件选取通过 window.configPanelApi.pickExeFile() 调用主进程文件对话框
   - 图形后端选择使用 rizui_dropdown 组件
   - v-click-outside 指令用于自定义下拉的点击外部关闭
+  - “跳转至GitHub”按钮使用 riz-ui 导出的 openURL() 打开系统浏览器
+    （openURL 内部走 window.open → 主进程 setWindowOpenHandler 拦截转发）
 
 ================================================================================
   五、维护注意事项
@@ -90,9 +93,9 @@
       （名单、权重、班级、自定义资源、密码保护），不可撤销
 
   2026-09-06
-    - “检查更新”卡片结果区新增“查看 GitHub Releases 页面 →”链接：
-      无论检查结果是有更新/已最新/出错，均提供跳转到 Release 页的入口
-      （releaseUrl 由主进程 update.js 返回，缺省兜底 releases/latest）
+    - “检查更新”卡片结果区新增“跳转至GitHub”按钮（riz-ui openURL）：
+      无论检查结果是有更新/已最新/出错，只要拿到 releaseUrl 即显示
+      跳转入口，打开 GitHub Releases 最新页（系统默认浏览器）
   最后更新：2026-09-06
 ================================================================================
 -->
@@ -236,7 +239,7 @@
       <rizui_button 
         primary
         v-if="updateReleaseUrl"
-        text="跳转至Github"
+        text="跳转至GitHub"
         r-icon="fa-solid fa-cloud-arrow-up"
         long
         @click="openURL('https://github.com/Yun-Hydrogen/blue-random/releases/latest')"
