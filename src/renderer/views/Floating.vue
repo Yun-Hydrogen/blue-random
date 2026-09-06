@@ -14,7 +14,7 @@
     1. 悬浮按钮   | 可拖拽圆形按钮，居中显示，点击触发 picker
     2. 人数选择器 | 胶囊形控件条，悬浮按钮正上方，MIN/−/N/+/MAX
     3. 确认/取消  | 左右两侧圆形按钮（X 关闭 / ✓ 确认抽取）
-  4. 鼠标穿透   | setShape 区域裁剪（矩形尺寸已优化为刚好贴合控件边缘）
+  4. 鼠标穿透   | setShape 区域裁剪（矩形采用外扩式取整 + 容差，防边缘裁切）
   5. 淡入淡出   | 主进程 win.setOpacity() 窗口级动画
 
   2026-08-29 鼠标穿透回退 setShape 并优化矩形尺寸：
@@ -24,6 +24,13 @@
         收缩态 = 正方形外接按钮圆（边长 sizePx+4）
         展开态 = 矩形紧贴 按钮 + 胶囊 + X/✓ 外缘
     - 保留 P1（挂载即应用初始 shape）、P9（hover class 控制 + blur 兜底）
+
+  2026-09-06 修复 shape 边缘轻微裁切（有概率偏移 1px）：
+    - 原因：控件 left:50% + translate(-50%) 定位，真实渲染边界常为 0.5px 浮点，
+      且 DPI 缩放≠100% 时 DIP→物理像素存在舍入差；原 Math.round 随机取整，
+      shape 可能比控件实际边缘小 1px → 边缘被裁切。
+    - 修复：buildRect() 左上角 floor、右下角 ceil（外扩式取整），并加大
+      容差 pad（2→3），保证 shape 始终覆盖控件实际渲染区域。
 
   2026-07-20 架构变更：
     - D3D9 作为全模式默认渲染后端。
@@ -665,8 +672,10 @@ function setMaxCount()   { if (count.value !== MAX_COUNT) { count.value = MAX_CO
 //  方案 A（setIgnoreMouseEvents + forward 转发）实测：D3D9 下
 //  forward 转发的 mousemove 不可用 → 窗口一直穿透、完全无法点击。
 //  回退到 setShape（SetWindowRgn）：
-//    收缩态：正方形外接按钮圆（边长 = sizePx + 4，刚好卡在按钮边缘）
+//    收缩态：正方形外接按钮圆（边长 = sizePx + pad*2，每边 pad 容差）
 //    展开态：一个矩形刚好包住 按钮 + 胶囊 + X/✓（紧贴各控件外缘）
+//  所有矩形经 buildRect() 外扩式取整（左上 floor / 右下 ceil），
+//  并在 applyShape 中统一加 pad=3 容差，吸收亚像素与 DPI 舍入差。
 //  矩形外区域自动穿透鼠标事件，零性能开销。
 //  注意：SetWindowRgn 会裁剪显示内容，收起时需等 CSS leave 动画播完
 //        （~220ms）再切小矩形，避免控件被裁断。
@@ -676,6 +685,24 @@ const shapeExpanded = ref(false)
 /* 收起时延迟收缩 shape（等 CSS leave 动画播完，避免内容被裁剪截断） */
 let shapeCloseTimer = null
 
+/*
+ * shape 矩形外扩式取整：
+ *   控件用 left:50% + translate(-50%) 定位，真实渲染边界常为 0.5px 级浮点；
+ *   且 DPI 缩放≠100% 时 DIP→物理像素转换会产生舍入差。
+ *   Math.round 随机向上/向下取整 → shape 比控件小 1px → 边缘被裁切。
+ *   因此：左上角 floor、右下角 ceil，保证形状永远覆盖控件实际渲染区域。
+ */
+function buildRect(left, top, right, bottom, pad) {
+  const x = Math.floor(left - pad)
+  const y = Math.floor(top - pad)
+  return {
+    x,
+    y,
+    width: Math.ceil(right + pad) - x,
+    height: Math.ceil(bottom + pad) - y
+  }
+}
+
 function applyShape(expanded) {
   /* 切换 shape 时强制清除 hover 态（鼠标可能已移出命中区） */
   hovered.value = false
@@ -683,7 +710,7 @@ function applyShape(expanded) {
   const w = pickerMetrics.value.windowSize
   const c = w / 2                     // 窗口中心（按钮圆心）
   const half = sizePx.value / 2       // 按钮半径
-  const pad = 2                       // 边缘容差（刚好贴合且不掉点）
+  const pad = 3                       // 边缘容差（外扩取整后仍保留，吸收 DPI 舍入差）
 
   if (expanded) {
     /* 展开态：矩形刚好包住 按钮 + 胶囊 + X/✓（紧贴控件外缘） */
@@ -692,22 +719,17 @@ function applyShape(expanded) {
     const actR = pickerMetrics.value.actionBtnSize * 0.6
     const ringH = pickerMetrics.value.ringThickness
     /* 胶囊顶：top:50% + translateY(-50% - half - ringH/2 - 8px) → c - half - ringH - 8 */
-    const top = c - half - ringH - 8 - pad
-    const bottom = c + half + pad
-    const left = c - rad - actR - pad
-    const right = c + rad + actR + pad
-    window.floatingButtonApi.setShape([{
-      x: Math.round(left),
-      y: Math.round(top),
-      width: Math.round(right - left),
-      height: Math.round(bottom - top)
-    }])
+    const top = c - half - ringH - 8
+    const bottom = c + half
+    const left = c - rad - actR
+    const right = c + rad + actR
+    window.floatingButtonApi.setShape([buildRect(left, top, right, bottom, pad)])
   } else {
-    /* 收缩态：正方形外接按钮圆（边长 = sizePx + 4，每边 2px 容差） */
-    const bs = sizePx.value + 4
-    const bx = Math.round((w - bs) / 2)
-    const by = Math.round((w - bs) / 2)
-    window.floatingButtonApi.setShape([{ x: bx, y: by, width: bs, height: bs }])
+    /* 收缩态：正方形外接按钮圆（边长 = sizePx + pad*2，每边 pad 容差） */
+    const bs = sizePx.value + pad * 2
+    const bx = (w - bs) / 2
+    const by = (w - bs) / 2
+    window.floatingButtonApi.setShape([buildRect(bx, by, bx + bs, by + bs, 0)])
   }
   shapeExpanded.value = expanded
 }

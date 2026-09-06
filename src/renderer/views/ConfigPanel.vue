@@ -152,7 +152,11 @@
       清除所有配置（forgetReset）
     - TabAdvanced 新增 :security-enabled prop 绑定与 @security-changed 刷新
 
-  最后更新：2026-08-29
+  2026-09-06
+    - 更新检查结果新增 :update-release-url prop 透传给 TabAdvanced：
+      无论是否有更新，结果区均显示“跳转至GitHub”按钮（riz-ui openURL）
+
+  最后更新：2026-09-06
 ================================================================================
 -->
 <template>
@@ -223,6 +227,7 @@
           :updateStatus="updateStatus"
           :updateTitle="updateTitle"
           :updateDetail="updateDetail"
+          :updateReleaseUrl="updateReleaseUrl"
           @update:admin="draft.admin = $event"
           @open-config-file="openConfigFile"
           @open-config-dir="openConfigDir"
@@ -363,7 +368,7 @@ const {
   createStartupTask, resetConfig, showInExplorer,
 
   /* 更新检查 */
-  updateLoading, updateStatus, updateTitle, updateDetail, checkUpdate,
+  updateLoading, updateStatus, updateTitle, updateDetail, updateReleaseUrl, checkUpdate,
 
   /* 关闭与动画 */
   isClosing, closeWithAnimation, handleCancel, handleApply, saveVersion,

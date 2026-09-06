@@ -574,11 +574,13 @@ export function useConfigPanel() {
    *   updateStatus  — 'update'（有新版本）/ 'error'（出错）/ ''（无结果）
    *   updateTitle   — 更新标题（如 "发现新版本 v2.0.0"）
    *   updateDetail  — 更新详情（版本说明、下载链接等）
+   *   updateReleaseUrl — GitHub Releases 页面链接（无论是否有更新都可跳转）
    */
   const updateLoading = ref(false)
   const updateStatus = ref('')
   const updateTitle = ref('')
   const updateDetail = ref('')
+  const updateReleaseUrl = ref('')
 
   /*
    * checkUpdate() —— 检查 GitHub Releases 是否有新版本
@@ -586,7 +588,7 @@ export function useConfigPanel() {
    * 流程：
    *   1. 设置 loading = true，清空之前的结果
    *   2. 调用主进程 checkUpdate（IPC → update.js → GitHub API）
-   *   3. 主进程返回 { status, title, detail }
+   *   3. 主进程返回 { status, title, detail, releaseUrl }
    *   4. 更新对应的 ref，loading = false
    */
   async function checkUpdate() {
@@ -594,12 +596,15 @@ export function useConfigPanel() {
     updateStatus.value = ''
     updateTitle.value = ''
     updateDetail.value = ''
+    updateReleaseUrl.value = ''
     const r = await window.configPanelApi?.checkUpdate()
     updateLoading.value = false
     if (r) {
       updateStatus.value = r.status || ''
       updateTitle.value = r.title || ''
       updateDetail.value = r.detail || ''
+      /* 兜底：未返回 releaseUrl 时仍给出 Releases 最新页（“无论是否有更新均可跳转”） */
+      updateReleaseUrl.value = r.releaseUrl || 'https://github.com/Yun-Hydrogen/blue-random/releases/latest'
     }
   }
 
@@ -852,7 +857,7 @@ export function useConfigPanel() {
   //    IPC 操作    → 10 个 async 函数（含 fetchLogs）
   //    关闭/应用   → isClosing, closeWithAnimation, handleCancel, handleApply
   //    主题样式    → panelBorderStyle, applyBtnStyle, trackBorderStyle, tabItemStyle
-  //    更新检查    → updateLoading, updateStatus, updateTitle, updateDetail, checkUpdate
+  //    更新检查    → updateLoading, updateStatus, updateTitle, updateDetail, updateReleaseUrl, checkUpdate
   // ============================================================
   return {
     /* ---- 标签导航 ---- */
@@ -891,6 +896,7 @@ export function useConfigPanel() {
     updateStatus,
     updateTitle,
     updateDetail,
+    updateReleaseUrl,
     checkUpdate,
 
     /* ---- 关闭 & 应用 ---- */

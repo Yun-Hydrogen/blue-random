@@ -92,8 +92,11 @@
   - stagePhase 状态机是核心：所有动画/交互都依赖阶段判断，修改需全局审视
   - token 由主进程下发，用于判断 onOpen 事件是否过期（快速连续抽取时）
   - sessionSeed 自增生成 activeSessionId，确保旧计时器不会误伤新会话
-  - .result-panel 使用 @click.stop 阻止冒泡（点击面板内部不触发关闭）
-  - BGM 淡入淡出逻辑见 playBgm/stopBgm/cancelFade 三函数的详细注释
+  - .result-panel 使用 @click.stop 阻止冒泡（点击面板内部不触发关闭）；
+    舞台空白点击关闭由根节点 handleStageClick 处理
+  - 音频资源（gachaAudio/musicAudio）在 closeResult 中由 releaseAudio()
+    释放（pause + 清空 src + 置空引用），防止 data URL 常驻内存
+  - 不加回 backdrop-filter：全屏透明窗口毛玻璃是 GPU/共享内存暴涨主因
 
 ================================================================================
   七、更新记录
@@ -107,7 +110,23 @@
     - 修复打包后信封图片消失：/image 绝对路径在 file:// 下解析失败，
       letterSrc 与装饰图改用 resolveAssetUrl 按协议拼接完整 URL
 
-  最后更新：2026-08-29
+  2026-09-05
+    - 内存优化：.result-panel 移除 backdrop-filter（全屏透明窗口毛玻璃是
+      GPU/共享内存暴涨主因），背景改为 rgba(255,255,255,0.92)
+    - 新增 releaseAudio()：关闭时暂停/释放 gachaAudio/musicAudio 及
+      data URL 引用（Promise 清理），防止 Audio 数据残留占用内存
+    - 交互变更：曾移除点击舞台空白处关闭，改为面板下方“点击此区域关闭”
+      长条 + Esc；空结果显示“暂无抽取结果”
+    - 信封阴影恢复为每张独立 drop-shadow（视觉效果优先）
+
+  2026-09-06
+    - 结果窗口尺寸：主进程恢复全屏透明展示（撤销固定 860×680），
+      本文件无需改动布局，仅同步注释
+    - 交互回退：移除“点击此区域关闭”长条，恢复点击舞台空白处关闭
+      （handleStageClick）+ 提示文字（instructionText）与 Esc；
+      保留空结果“暂无抽取结果”占位
+
+  最后更新：2026-09-06
 ================================================================================
 -->
 <template>
@@ -424,17 +443,17 @@ function handleReset(payload) {
   resetResultState({ stopSound: true, clearResults: true })
 }
 
-/* 点击舞台（面板外区域）→ 关闭 */
-function handleStageClick() {
-  if (!canClose.value || isClosing.value) return
-  closeResult()
-}
-
 /* 按 Esc → 关闭 */
 function handleKeydown(event) {
   if (event.key === 'Escape' && canClose.value && !isClosing.value) {
     closeResult()
   }
+}
+
+/* 点击舞台（面板外区域）→ 关闭 */
+function handleStageClick() {
+  if (!canClose.value || isClosing.value) return
+  closeResult()
 }
 
 // ============================================================
@@ -486,10 +505,28 @@ async function closeResult() {
      */
     resetResultState({ stopSound: false, clearResults: true })
     stopGachaLoadingSound()
+    releaseAudio()
     await nextTick()
     await new Promise((resolve) => window.requestAnimationFrame(resolve))
     if (window.pickResultApi) window.pickResultApi.close()
   }, 220)
+}
+
+// ============================================================
+//  12.5 音频资源释放（关闭时调用，避免常驻内存）
+// ============================================================
+
+/*
+ * 释放音效与 BGM：pause + 清空 src（释放解码器）+ 置空引用 + 清空 data URL 大字符串。
+ * 在结果面板关闭时调用（窗口将关闭/隐藏，无需保留 Audio）。
+ */
+function releaseAudio() {
+  if (gachaAudio) { gachaAudio.pause(); gachaAudio.src = ''; gachaAudio = null }
+  if (musicAudio) { musicAudio.pause(); musicAudio.src = ''; musicAudio = null }
+  gachaSoundDataUrl.value = ''
+  bgmDataUrl.value = ''
+  bgmPlaying = false
+  if (fadeTimerId) { clearTimeout(fadeTimerId); fadeTimerId = null }
 }
 
 // ============================================================
@@ -736,8 +773,8 @@ onBeforeUnmount(() => {
   gap: 18px;
   padding: 20px 36px 16px;
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.92);
+  /* backdrop-filter 已移除：全屏透明窗口毛玻璃导致 GPU/共享内存暴涨（500MB 主因） */
   border: 4px solid #66ccff;
   box-shadow: 0 8px 32px rgba(6, 22, 48, 0.15);
   min-width: 320px;
@@ -807,6 +844,7 @@ onBeforeUnmount(() => {
  *  入场动画：letter-fly-in（0.6s），延迟 index×0.12s。
  *  初始状态：超大 + 旋转 + 透明（等待动画覆盖）。
  */
+/* 信封投影恢复为每张独立（开启时视觉效果优先） */
 .letter-card {
   position: relative;
   width: clamp(120px, 16vw, 200px);
@@ -817,7 +855,7 @@ onBeforeUnmount(() => {
   animation-delay: calc(var(--index) * 0.12s);
 }
 
-/* 信封图片：投影增加纵深 */
+/* 信封图片：投影增加纵深（恢复独立阴影） */
 .letter-img {
   width: 100%;
   height: 100%;
