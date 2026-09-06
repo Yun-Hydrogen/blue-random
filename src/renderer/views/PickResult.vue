@@ -517,7 +517,7 @@ async function closeResult() {
 
 /*
  * 释放音效与 BGM：pause + 清空 src（释放解码器）+ 置空引用 + 清空 data URL 大字符串。
- * 在结果面板关闭时调用（窗口将 hide，无需保留 Audio）。
+ * 在结果面板关闭时调用（窗口将关闭/隐藏，无需保留 Audio）。
  */
 function releaseAudio() {
   if (gachaAudio) { gachaAudio.pause(); gachaAudio.src = ''; gachaAudio = null }
