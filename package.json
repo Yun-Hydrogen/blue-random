@@ -32,7 +32,7 @@
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.3.1",
     "axios": "^1.15.0",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.3.1",
     "koffi": "^3.1.6",
     "riz-ui": "https://github.com/Yun-Hydrogen/riz-ui/archive/refs/heads/main.tar.gz",
     "vue": "^3.5.17",
