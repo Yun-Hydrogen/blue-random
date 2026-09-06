@@ -223,6 +223,7 @@
           :updateStatus="updateStatus"
           :updateTitle="updateTitle"
           :updateDetail="updateDetail"
+          :updateReleaseUrl="updateReleaseUrl"
           @update:admin="draft.admin = $event"
           @open-config-file="openConfigFile"
           @open-config-dir="openConfigDir"
@@ -363,7 +364,7 @@ const {
   createStartupTask, resetConfig, showInExplorer,
 
   /* 更新检查 */
-  updateLoading, updateStatus, updateTitle, updateDetail, checkUpdate,
+  updateLoading, updateStatus, updateTitle, updateDetail, updateReleaseUrl, checkUpdate,
 
   /* 关闭与动画 */
   isClosing, closeWithAnimation, handleCancel, handleApply, saveVersion,

@@ -88,7 +88,12 @@
       disablePassword，成功后 emit('security-changed')
     - “重置所有配置”确认文案更新：重置会几乎清理整个配置目录
       （名单、权重、班级、自定义资源、密码保护），不可撤销
-  最后更新：2026-08-29
+
+  2026-09-06
+    - “检查更新”卡片结果区新增“查看 GitHub Releases 页面 →”链接：
+      无论检查结果是有更新/已最新/出错，均提供跳转到 Release 页的入口
+      （releaseUrl 由主进程 update.js 返回，缺省兜底 releases/latest）
+  最后更新：2026-09-06
 ================================================================================
 -->
 
@@ -227,6 +232,17 @@
       </div>
       <div v-if="updateStatus" class="cfg-hint" :class="updateStatus">{{ updateTitle }}</div>
       <div v-if="updateDetail" class="update-detail-text">{{ updateDetail }}</div>
+      <!-- 无论是否有更新，均提供 GitHub Releases 跳转入口 -->
+      <rizui_button 
+        primary
+        v-if="updateReleaseUrl"
+        text="跳转至Github"
+        r-icon="fa-solid fa-cloud-arrow-up"
+        long
+        @click="openURL('https://github.com/Yun-Hydrogen/blue-random/releases/latest')"
+        :color="tabTheme"
+        style="margin-top: 10px;"
+      />
     </rizui_card>
 
     <!-- 重置确认 Dialog -->
@@ -269,7 +285,7 @@
 //  onMounted — 组件挂载完成后的生命周期钩子
 // ============================================================
 import { ref, reactive, computed, onMounted } from 'vue'
-import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox } from 'riz-ui'
+import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, openURL } from 'riz-ui'
 
 /* Tab 主题色 */
 const tabTheme = '#aa88dd'
@@ -310,6 +326,9 @@ const props = defineProps({
 
   /* updateDetail — 更新结果的详细说明（支持换行） */
   updateDetail: String,
+
+  /* updateReleaseUrl — GitHub Releases 页面链接（无论是否有更新均可跳转） */
+  updateReleaseUrl: String,
 
   /* securityEnabled — 是否已开启密码保护（安全管理） */
   securityEnabled: Boolean

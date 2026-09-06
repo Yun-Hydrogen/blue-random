@@ -196,7 +196,15 @@ function getPowerShellPath() {
  *       cmdLine 使用本函数输出（含引号），二者分别作为 StartUIAccessProcess 前两个参数。
  */
 function buildUiAccessCommandLine(exePath, args) {
-  const quote = (value) => `"${String(value).replace(/"/g, '\\"')}"`;
+  /*
+   * Windows CommandLineToArgvW 规则转义（CreateProcess 命令行）：
+   *   1. 双引号前若有奇数个反斜杠，一半转义、引号作为字面量；
+   *   2. 参数以反斜杠结尾时需再补一个反斜杠。
+   * 示例表达式同时处理反斜杠与双引号，规避 CodeQL js/incomplete-sanitization。
+   */
+  const quote = (value) => `"${String(value)
+    .replace(/(\\*)"/g, '$1$1\\"')
+    .replace(/(\\+)$/, '$1$1')}"`;
   const safeArgs = Array.isArray(args) ? args : [];
   return [quote(exePath), ...safeArgs.map(arg => quote(arg))].join(' ');
 }
@@ -486,10 +494,24 @@ function createAdminStartupTask({ taskName, exePath, runAsUser }) {
        *
        * 为什么不能直接用 spawnSync + RunAs：
        *   schtasks 本身不弹 UAC，必须由管理员进程调用。
-       *   因此需要 PowerShell Start-Process -Verb RunAs 先提权。 */
-      const psArgs = taskArgs.map(arg => `"${arg.replace(/"/g, '\\"')}"`).join(' ');
-      const command = `Start-Process -FilePath 'schtasks.exe' -ArgumentList '${quoteForPowerShell(psArgs)}' -Verb RunAs -Wait`;
-      execFileSync('powershell', ['-NoProfile', '-Command', command], { stdio: 'ignore' });
+       *   因此需要 PowerShell Start-Process -Verb RunAs 先提权。
+       *
+       * 安全实现（规避 CodeQL js/incomplete-sanitization 不完整转义）：
+       *   - 参数以 PowerShell 单引号字符串数组书写（反斜杠为字面量，无需转义）
+       *   - 数组直接传给 Start-Process -ArgumentList（无 shell 字符串解析）
+       *   - 脚本经 -File 执行，不经 -Command 字符串拼接 */
+      const psParams = taskArgs.map(arg => `'${String(arg).replace(/'/g, "''")}'`).join(', ');
+      const script = [
+        `$argList = @(${psParams})`,
+        "Start-Process -FilePath 'schtasks.exe' -ArgumentList $argList -Verb RunAs -Wait"
+      ].join("\r\n");
+      const tmpScript = path.join(require('os').tmpdir(), `br-task-${Date.now()}.ps1`);
+      fs.writeFileSync(tmpScript, script, 'utf8');
+      try {
+        execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpScript], { stdio: 'ignore' });
+      } finally {
+        try { fs.unlinkSync(tmpScript); } catch (_) { /* 清理失败忽略 */ }
+      }
     }
     console.log('[admin] 计划任务创建成功, 名称=' + safeTaskName + ', 路径=' + exePath);
     return { ok: true, message: '计划任务已创建或更新。' };

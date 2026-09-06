@@ -81,6 +81,8 @@
   2026-08-29  修复悬浮按钮坐标 X 始终为 0：
               - createFloatingButtonWindow 位置恢复判断改为显式排除 null/undefined，
                 因 Number(null) === 0，会把“自动位置”误判为已保存并强制放至 x=0
+  2026-09-06  结果窗口尺寸：撤销 2026-09-05 的固定 860×680（固定尺寸压缩展示效果），
+              恢复全屏透明展示；内存优化仍由关闭即销毁 + 信封图片压缩承担
 
 ================================================================================
 维护建议
@@ -560,15 +562,22 @@ function stopFloatingWindowWatchdog() {
 // ============================================================================
 
 /*
- * 关闭（隐藏）抽取结果窗口。
- *
- * 不销毁窗口（UIAccess 兼容性要求），仅 hide()。
- * blur() → hide() → setTimeout(show floating) 确保全屏窗口的
- * 焦点和 z-order 被 Windows 完全清理后再显示悬浮按钮，
- * 避免悬浮按钮进入半激活僵死状态（可见但点击无响应）。
+ * 结果窗关闭策略：
+ *   true  = 关闭即 destroy（释放全屏透明窗口的 GPU/合成/渲染资源，
+ *           解决“关闭后内存不回落”（250→350 残留）问题；下次打开重建）
+ *   false = 旧行为 hide 复用（UIAccess 兼容性的保守选项，但内存常驻）
+ * 实测若 destroy 重建在 UIAccess 下动画异常，改为 false 即可回退。
+ */
+const PICK_RESULT_DESTROY_ON_CLOSE = true;
+
+/*
+ * 关闭抽取结果窗口。
+ * 默认策略：销毁窗口释放资源；重建逻辑由 createPickResultWindowInstance()
+ * 在下次打开时自动处理（closed 事件已置 null）。
+ * blur()/hide() 顺序仅在 hide 复用模式下保留。
  */
 function closePickResultWindow() {
-  console.log('[windows] 关闭结果窗口');
+  console.log('[windows] 关闭结果窗口（策略=' + (PICK_RESULT_DESTROY_ON_CLOSE ? 'destroy' : 'hide') + '）');
   if (!pickResultWindow || pickResultWindow.isDestroyed()) {
     currentPickResults = [];
     activePickResultToken = 0;
@@ -577,24 +586,23 @@ function closePickResultWindow() {
     return;
   }
 
-  if (pickResultWindow.isVisible()) {
-    /*
-     * 先 blur 释放焦点，再 hide。
-     * 全屏 alwaysOnTop 窗口可能残留激活状态，
-     * 直接 hide 后 showInactive 悬浮按钮可能无法正常接收点击。
-     */
+  if (PICK_RESULT_DESTROY_ON_CLOSE) {
+    const win = pickResultWindow;
+    pickResultWindow = null;
+    isPickResultWindowReady = false;
+    currentPickResults = [];
+    activePickResultToken = 0;
+    isFloatingHiddenForPickCount = false;
+    try { win.destroy(); } catch (_) { /* 忽略 */ }
+  } else if (pickResultWindow.isVisible()) {
+    /* 旧行为：先 blur 释放焦点，再 hide（全屏 alwaysOnTop 窗口可能残留激活状态） */
     pickResultWindow.blur();
     pickResultWindow.hide();
+    currentPickResults = [];
+    activePickResultToken = 0;
+    isFloatingHiddenForPickCount = false;
   }
-  
-  currentPickResults = [];
-  activePickResultToken = 0;
-  isFloatingHiddenForPickCount = false;
 
-  /*
-   * setTimeout 确保 hide() 的窗口消息被 Windows 完全处理后再
-   * 显示悬浮按钮，避免 z-order / 激活状态竞争。
-   */
   setTimeout(() => {
     fadeInFloatingButtonWindow();
   }, 0);
@@ -614,6 +622,9 @@ function createPickResultWindowInstance() {
     show: false,
     frame: false,
     transparent: true,
+    /* 全屏透明展示（恢复 2026-09-05 的固定 860×680 —— 固定尺寸会压缩效果）
+     * 内存优化改由：关闭即销毁（PICK_RESULT_DESTROY_ON_CLOSE）+
+     * 信封图片压缩 + 渲染层去 backdrop-filter/releaseAudio 承担 */
     fullscreen: true,
     resizable: false,
     minimizable: false,
