@@ -126,15 +126,6 @@ public class ArcGeometryTests
                 encoder.Save(fs);
             }
 
-            string artifactDir = @"C:\Users\YunHydrogen\.gemini\antigravity\brain\62a767c9-1dd3-454b-a3b5-7d3fffebb95b";
-            string previewPath = Path.Combine(artifactDir, "arc_preview.png");
-            var encoder2 = new PngBitmapEncoder();
-            encoder2.Frames.Add(BitmapFrame.Create(rtb));
-            using (var fs = File.Create(previewPath))
-            {
-                encoder2.Save(fs);
-            }
-
             geom.Freeze();
             Console.WriteLine($"Geom Bounds: {geom.Bounds}");
             Assert.True(geom.Bounds.Width > 0);
