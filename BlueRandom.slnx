@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src-csharp/">
+    <Project Path="src-csharp/BlueRandom.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BlueRandom.Tests/BlueRandom.Tests.csproj" />
+  </Folder>
+</Solution>

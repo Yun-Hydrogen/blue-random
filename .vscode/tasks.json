@@ -1,0 +1,89 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "编译前端",
+            "type": "shell",
+            "command": "npm run build:vite",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "detail": "使用 Vite 编译 Vue 3 配置面板前端至 dist/ 目录"
+        },
+        {
+            "label": "编译后端",
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/src-csharp/BlueRandom.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "detail": "使用 .NET 10 SDK 编译 C# 后端与 WPF 宿主程序"
+        },
+        {
+            "label": "全量编译 (前端 + 后端)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "编译前端",
+                "编译后端"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "按序执行前端 Vite 构建与 C# 后端构建 (默认构建任务 Ctrl+Shift+B)"
+        },
+        {
+            "label": "全量编译并输出可执行文件",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "编译前端"
+            ],
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "publish",
+                "${workspaceFolder}/src-csharp/BlueRandom.csproj",
+                "-c",
+                "Release",
+                "-r",
+                "win-x64",
+                "--self-contained",
+                "true",
+                "-o",
+                "${workspaceFolder}/publish"
+            ],
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "detail": "编译前端并将后端发布为单文件独立版 (Single-File Standalone，内置所有资源与原生模块，输出为单一可执行文件 publish/BlueRandom.exe)"
+        },
+        {
+            "label": "运行单元测试",
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "test",
+                "${workspaceFolder}/tests/BlueRandom.Tests/BlueRandom.Tests.csproj",
+                "--verbosity",
+                "normal"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "test",
+            "detail": "执行 xUnit 自动化测试套件"
+        }
+    ]
+}
+

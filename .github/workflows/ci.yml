@@ -1,0 +1,88 @@
+# ============================================================
+#  Workflow: CI Build (标准持续集成构建)
+#
+#  触发条件：
+#    - 自动触发：main / NEXT / NEXT-Dev / neo-dev 等分支的 push 与 pull_request
+#    - 手动触发：workflow_dispatch (支持手动验证 CI 流程)
+#  职责：
+#    - 自动编译 Vue 3 前端静态产物 (Vite)
+#    - 执行 xUnit 单元测试保障代码质量
+#    - 编译并输出单文件独立版 Windows 构建产物
+#    - 上传构建 artifact 供下载测试，绝不自动发布 Release
+# ============================================================
+name: CI Build (Windows)
+
+on:
+  push:
+    branches:
+      - main
+      - NEXT
+      - NEXT-Dev
+      - neo
+      - neo-dev
+  pull_request:
+    branches:
+      - main
+      - NEXT
+      - NEXT-Dev
+      - neo
+      - neo-dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci-build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build WebUI (Vite)
+        run: npm run build:vite
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore .NET Solution
+        run: dotnet restore BlueRandom.sln
+
+      - name: Run Unit Tests
+        run: dotnet test tests/BlueRandom.Tests/BlueRandom.Tests.csproj --configuration Release --verbosity normal
+
+      - name: Publish Single-File Standalone (win-x64)
+        run: >
+          dotnet publish src-csharp/BlueRandom.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -o publish/ci
+
+      - name: Prepare Single-File CI Package
+        shell: pwsh
+        run: |
+          $json = Get-Content package.json -Raw | ConvertFrom-Json
+          $ver = $json.version
+          $code = if ($json.codename) { $json.codename } else { "Dev" }
+          New-Item -ItemType Directory -Force -Path publish\out | Out-Null
+          Copy-Item "publish\ci\BlueRandom.exe" "publish\out\BlueRandom-$code-v$ver-CI-win-x64.exe"
+
+      - name: Upload CI Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlueRandom-CI-Windows
+          path: publish/out/BlueRandom-*.exe
+          if-no-files-found: error

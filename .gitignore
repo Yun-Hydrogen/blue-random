@@ -1,0 +1,11 @@
+/node_modules
+/dist
+**/bin/
+**/obj/
+*.user
+*.suo
+TestResults/
+publish/
+/dist-electron
+/configs
+.vs/

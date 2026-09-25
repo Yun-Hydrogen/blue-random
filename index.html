@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/image/app.ico" />
+    <title>Blue Random 蔚蓝点名</title>
+    <!-- 预加载自定义字体，避免 FOIT/FOUT -->
+    <link rel="preload" href="/fonts/UI.ttf" as="font" type="font/ttf" crossorigin />
+    <style>
+      @font-face {
+        font-family: 'UI';
+        src: url('/fonts/UI.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/renderer/main.js"></script>
+  </body>
+</html>

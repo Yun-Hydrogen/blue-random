@@ -1,0 +1,8 @@
+{
+    "editor.fontFamily": "Maple Mono NF CN",
+    "dotnet.defaultSolution": "BlueRandom.sln",
+    "omnisharp.defaultLaunchSolution": "BlueRandom.sln",
+    "omnisharp.enableRoslynAnalyzers": true,
+    "omnisharp.enableEditorConfigSupport": true,
+    "dotnet.server.useOmnisharp": false
+}

@@ -1,0 +1,57 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "调试: Blue Random (全量编译 + 启动调试)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "全量编译 (前端 + 后端)",
+            "program": "${workspaceFolder}/src-csharp/bin/Debug/net10.0-windows/BlueRandom.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        },
+        {
+            "name": "调试: 仅编译后端并调试 (快速 F5)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "编译后端",
+            "program": "${workspaceFolder}/src-csharp/bin/Debug/net10.0-windows/BlueRandom.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        },
+        {
+            "name": "全量编译并输出可执行文件",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run build:vite && dotnet publish src-csharp/BlueRandom.csproj -c Release -r win-x64 --self-contained true -o publish/standalone"
+        },
+        {
+            "name": "编译后端",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "dotnet build src-csharp/BlueRandom.csproj"
+        },
+        {
+            "name": "编译前端",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run build:vite"
+        },
+        {
+            "name": "运行: 全量发布独立版并启动 (Standalone)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "全量编译并输出可执行文件",
+            "program": "${workspaceFolder}/publish/standalone/BlueRandom.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        }
+    ]
+}
+

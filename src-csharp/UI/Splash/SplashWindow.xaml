@@ -1,0 +1,138 @@
+<Window x:Class="BlueRandom.UI.Splash.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:BlueRandom.Core.Resources"
+        Title="Blue Random Initializer"
+        Height="330" Width="530"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        FontFamily="{x:Static res:ResourceCache.CustomFont}"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="Auto"
+        RenderOptions.ClearTypeHint="Enabled"
+        RenderOptions.BitmapScalingMode="HighQuality">
+
+    <Window.Resources>
+        <!-- 启动淡入动画 -->
+        <Storyboard x:Key="FadeInStoryboard">
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.0" To="1.0" Duration="0:0:0.35">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <!-- 退出淡出动画 -->
+        <Storyboard x:Key="FadeOutStoryboard">
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1.0" To="0.0" Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseIn"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <!-- 独立底层阴影：纯投影，不包含任何文本与内容，彻底隔离像素着色器栅格化以保证超高清矢量渲染 -->
+        <Border Background="#F4F8FD"
+                CornerRadius="16"
+                Margin="0">
+            <Border.Effect>
+                <DropShadowEffect Color="#004B96" BlurRadius="20" ShadowDepth="4" Opacity="0.22" RenderingBias="Performance"/>
+            </Border.Effect>
+        </Border>
+
+        <!-- 主内容卡片：无任何 Effect 影响，直绘硬件矢量字体与高清图标 -->
+        <Border CornerRadius="16" Background="#F4F8FD" BorderBrush="#128AFA" BorderThickness="2"
+                ClipToBounds="True">
+            <Grid>
+                <!-- 科技风装饰条纹背景 -->
+                <Canvas HorizontalAlignment="Right" VerticalAlignment="Top" Width="180" Height="180" Opacity="0.08">
+                    <Path Fill="#128AFA" Data="M0,0 L180,0 L180,180 Z"/>
+                </Canvas>
+
+                <!-- 右上角版本代号徽标 (Initializer UI 右上角显示版本代号) -->
+                <Border HorizontalAlignment="Right" VerticalAlignment="Top" 
+                        Margin="0,16,18,0"
+                        Background="#15128AFA" 
+                        BorderBrush="#35128AFA" 
+                        BorderThickness="1" 
+                        CornerRadius="8" 
+                        Padding="8,3">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtCodename" 
+                                   Text="Unknown" 
+                                   FontFamily="{x:Static res:ResourceCache.CustomFont}"
+                                   FontSize="11" 
+                                   FontWeight="Bold" 
+                                   Foreground="#128AFA"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="30,20,30,30">
+                    <!-- 应用主标题与图标 -->
+                    <Image x:Name="LogoImage" Width="72" Height="72" Margin="0,0,0,12" 
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           SnapsToDevicePixels="True"/>
+                    
+                    <TextBlock Text="蔚蓝点名 | Blue Random" 
+                               FontFamily="{x:Static res:ResourceCache.CustomFont}"
+                               FontSize="24" 
+                               FontWeight="Bold" 
+                               Foreground="#2B4B6F" 
+                               HorizontalAlignment="Center" />
+
+                    <TextBlock Text="应用数据初始化中 | Initializing Data..." 
+                               FontFamily="{x:Static res:ResourceCache.CustomFont}"
+                               FontSize="13" 
+                               FontWeight="SemiBold" 
+                               Foreground="#5D7A9C" 
+                               HorizontalAlignment="Center" 
+                               Margin="0,4,0,24"/>
+
+                    <!-- 状态描述文字 -->
+                    <TextBlock x:Name="StatusText" 
+                               Text="正在启动..." 
+                               FontFamily="{x:Static res:ResourceCache.CustomFont}"
+                               FontSize="12" 
+                               Foreground="#128AFA" 
+                               HorizontalAlignment="Center" 
+                               Margin="0,0,0,8"/>
+
+                    <!-- 扁平进度条 -->
+                    <Grid Width="380" Height="8">
+                        <!-- 背景轨道 -->
+                        <Border CornerRadius="4" Background="#D5E6F8"/>
+                        <!-- 进度填充条 -->
+                        <Border x:Name="ProgressBarFill" 
+                                CornerRadius="4" 
+                                Background="#128AFA" 
+                                HorizontalAlignment="Left" 
+                                Width="0">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#128AFA" BlurRadius="6" ShadowDepth="0" Opacity="0.6"/>
+                            </Border.Effect>
+                        </Border>
+                    </Grid>
+
+                    <!-- 百分比数字 -->
+                    <TextBlock x:Name="PercentText" 
+                               Text="0%" 
+                               FontFamily="{x:Static res:ResourceCache.CustomFont}"
+                               FontSize="11" 
+                               Foreground="#8CA5C2" 
+                               HorizontalAlignment="Right" 
+                               Width="380"
+                               Margin="0,6,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
