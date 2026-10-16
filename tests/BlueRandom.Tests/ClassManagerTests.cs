@@ -1,16 +1,27 @@
+// ============================================================================
+// 文件名称: ClassManagerTests.cs
+// 项目名称: BlueRandom.Tests
+// 文件说明: 多班级管理服务 (ClassManagerService) 与序列化模型的单元测试
+// 核心职责: 验证班级创建、读取、重命名、删除 (CRUD) 与 CamelCase JSON 序列化规范
+// ============================================================================
+
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text.Json;
 using BlueRandom.Core.Config;
-using BlueRandom.Core.Scheduler;
 using BlueRandom.Services;
 using Xunit;
 
 namespace BlueRandom.Tests;
 
+/// <summary>
+/// 班级配置管理器与花名册管理单元测试集
+/// </summary>
 public class ClassManagerTests
 {
+    /// <summary>
+    /// 验证班级实体与学员数据结构向前端序列化时遵循严格的小驼峰命名约定
+    /// </summary>
     [Fact]
     public void ClassConfig_And_StudentItem_Serialize_To_CamelCase_Json()
     {
@@ -44,6 +55,9 @@ public class ClassManagerTests
         Assert.DoesNotContain("\"StudentList\":", json);
     }
 
+    /// <summary>
+    /// 验证班级增删改查全生命周期管理（创建 -> 读取 -> 重命名 -> 删除）的完整逻辑闭环
+    /// </summary>
     [Fact]
     public void ClassManagerService_Crud_Operations()
     {
@@ -76,6 +90,9 @@ public class ClassManagerTests
         Assert.Null(afterDelete);
     }
 
+    /// <summary>
+    /// 验证初次启动时默认班级自动补全、激活以及全局配置花名册映射的有效性
+    /// </summary>
     [Fact]
     public void EnsureInitialized_Sets_ActiveClassId_And_Roster()
     {

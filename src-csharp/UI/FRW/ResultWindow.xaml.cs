@@ -1,7 +1,28 @@
+// ============================================================================
+//  File: ResultWindow.xaml.cs
+//  Project: BlueRandom (WPF Native)
+//  Description:
+//    全屏沉浸式招募结果展示浮窗 (FRW: Floating Result Window)。
+//
+//  Architecture & Visual Engineering Highlights:
+//    1. 还原经典手游招募动效体系：
+//       - 主容器 0.7s cubic-bezier(0.2, 0.8, 0.2, 1.0) 平滑飞入与弹性缩放；
+//       - 统一 15° 倾斜空间坐标系：信封与姓名卡片同构旋转，避免局部倾斜产生的边缘撕裂；
+//       - 交错编排 (Stagger Sequencing)：信封依次延迟 index * 120ms 下落并放大至原尺寸；
+//         待信封全数到位后，纯白姓名条自中心弹跳揭晓；
+//    2. 解决 WPF 文本栅格化渲染缺陷：
+//       - 采用双层 Border 架构，将 DropShadowEffect 隔离于底层空白 Border，顶层实体 Border 承载纯净矢量文字，
+//         彻底杜绝 WPF 像素着色器导致的 ClearType 降级模糊；
+//    3. 音频与流媒体引擎：
+//       - 支持独立抽卡音效即时播放；
+//       - 基于 DispatcherTimer 驱动 30ms 粒度 BGM 渐入与离场平滑淡出 (Fade In / Fade Out)；
+//    4. 交互安全与状态防抖：
+//       - 内置基于 Token 与动画生命周期的 canClose 锁，防止用户误触提前关闭导致视觉截断。
+// ============================================================================
+
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Media;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,9 +39,16 @@ using BlueRandom.Services;
 
 namespace BlueRandom.UI.FRW;
 
+/// <summary>
+/// 全屏沉浸式招募结果展示窗体。
+/// </summary>
 public partial class ResultWindow : Window
 {
     private static readonly IEasingFunction s_cubicEase = CreateFrozenEase();
+
+    /// <summary>
+    /// 构建并冻结全局共享的三次贝塞尔平滑缓动曲线实例。
+    /// </summary>
     private static IEasingFunction CreateFrozenEase()
     {
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
@@ -40,6 +68,9 @@ public partial class ResultWindow : Window
     private double _bgmFadeDurationSec = 1.5;
     private bool _isBgmFadingOut = false;
 
+    /// <summary>
+    /// 初始化结果窗口，注入私有字体与立绘资源，并立即挂载 IPC 监听。
+    /// </summary>
     public ResultWindow()
     {
         InitializeComponent();
@@ -50,6 +81,10 @@ public partial class ResultWindow : Window
         IpcBroker.Subscribe(IpcModule.Frw, OnIpcMessageReceived);
     }
 
+    /// <summary>
+    /// 根据配置回放单次抽卡音效（支持自定义音频或默认内置音效）。
+    /// </summary>
+    /// <param name="props">结果窗口配置数据。</param>
     private void PlaySfx(PickResultDialogConfig props)
     {
         if (!props.DefaultPlayGachaSound) return;
@@ -115,6 +150,10 @@ public partial class ResultWindow : Window
         }
     }
 
+    /// <summary>
+    /// 初始化并播放背景音乐 (BGM)，执行起播点跳转与平滑淡入定时步进。
+    /// </summary>
+    /// <param name="props">结果窗口配置数据。</param>
     private void PlayBgm(PickResultDialogConfig props)
     {
         StopBgmTimer();
@@ -196,6 +235,9 @@ public partial class ResultWindow : Window
         }
     }
 
+    /// <summary>
+    /// 当 BGM 播放自然结束时的循环回放处理（跳转至指定的 BgmStartTime 重新循环）。
+    /// </summary>
     private void OnBgmEnded(object? sender, EventArgs e)
     {
         try
@@ -210,6 +252,9 @@ public partial class ResultWindow : Window
         catch { }
     }
 
+    /// <summary>
+    /// 停止并销毁当前运行的 BGM 音量淡入淡出定时器。
+    /// </summary>
     private void StopBgmTimer()
     {
         if (_bgmFadeTimer != null)
@@ -219,6 +264,9 @@ public partial class ResultWindow : Window
         }
     }
 
+    /// <summary>
+    /// 立即强制静音并关闭 BGM 媒体流。
+    /// </summary>
     private void StopBgmImmediate()
     {
         StopBgmTimer();
@@ -235,6 +283,10 @@ public partial class ResultWindow : Window
         _currentBgmVolume = 0.0;
     }
 
+    /// <summary>
+    /// 触发 BGM 平滑线性淡出 (Fade Out)，衰减至 0 后停止回放并执行完成回调。
+    /// </summary>
+    /// <param name="onComplete">淡出完毕后的延续动作。</param>
     private void FadeOutBgm(Action onComplete)
     {
         StopBgmTimer();
@@ -269,8 +321,11 @@ public partial class ResultWindow : Window
     }
 
     /// <summary>
-    /// 展示招募结果并播放 1:1 复刻自 Electron 的原汁原味入场、15°信封下落与姓名弹起动画
+    /// 编排并呈现抽卡结果序列：
+    /// 包括面板 0.7s cubic-bezier 飞入、信封 15° 倾角交错下落、BGM 起播以及防误触 canClose 锁定。
     /// </summary>
+    /// <param name="students">被抽中的学员列表及其对应的信封品阶色彩。</param>
+    /// <param name="props">浮窗个性化样式与声音配置。</param>
     public void DisplayResults(List<CalledStudent> students, PickResultDialogConfig props)
     {
         Dispatcher.Invoke(() =>
@@ -345,7 +400,7 @@ public partial class ResultWindow : Window
             PlaySfx(props);
             PlayBgm(props);
 
-            // 5. 主卡片面板飞入动画 (panel-fly-in: 0.7s cubic-bezier(0.2, 0.8, 0.2, 1))
+            // 6. 主卡片面板飞入动画 (panel-fly-in: 0.7s cubic-bezier(0.2, 0.8, 0.2, 1))
             PanelContainer.RenderTransformOrigin = new Point(0.5, 0.5);
             var panelPop = new DoubleAnimation(0.85, 1.0, TimeSpan.FromMilliseconds(700))
             {
@@ -362,7 +417,7 @@ public partial class ResultWindow : Window
             PanelTranslate.BeginAnimation(TranslateTransform.YProperty, panelSlide);
             PanelContainer.BeginAnimation(OpacityProperty, panelFade);
 
-            // 6. 构造每个学员的卡片并分发行列
+            // 7. 构造每个学员的卡片并分发行列
             for (int i = 0; i < students.Count; i++)
             {
                 var student = students[i];
@@ -378,7 +433,7 @@ public partial class ResultWindow : Window
                 }
             }
 
-            // 7. 动画播完前锁定关闭 (canClose 机制：防误触关闭)
+            // 8. 动画播完前锁定关闭 (canClose 机制：防误触关闭)
             if (students.Count > 0)
             {
                 int totalDelayMs = (Math.Max(students.Count - 1, 0) * 120) + 600;
@@ -399,8 +454,12 @@ public partial class ResultWindow : Window
 
     /// <summary>
     /// 构造单个学员招募卡片：
-    /// 整个容器统领 15° 倾斜，信封与姓名白卡共用统一倾斜坐标系 (完美对齐 PickResult.vue)
+    /// 整个卡片网格统领 15° 倾斜，信封与姓名白卡共用统一倾斜坐标系，并挂载交错下落与独立阴影。
     /// </summary>
+    /// <param name="student">被抽取的学员信息（姓名、颜色品阶）。</param>
+    /// <param name="index">在当前抽取批次中的次序索引（用于交错延迟）。</param>
+    /// <param name="totalCount">本轮抽取的学员总数。</param>
+    /// <returns>构建完成且配置有进场关键帧动画的卡片 FrameworkElement 实例。</returns>
     private FrameworkElement CreateStudentCard(CalledStudent student, int index, int totalCount)
     {
         // 外层卡片网格容器 (4:3 比例，宽 196，高 147，水平外间距 16px -> 相邻卡片间距 32px)
@@ -566,7 +625,7 @@ public partial class ResultWindow : Window
     }
 
     /// <summary>
-    /// 平滑淡出并关闭/隐藏浮窗
+    /// 平滑播放面板飞出退场动效 (0.2s)、执行 BGM 淡出，并在完全隐去后向后端上报 WindowClosed。
     /// </summary>
     public void Dismiss()
     {
@@ -616,6 +675,9 @@ public partial class ResultWindow : Window
         });
     }
 
+    /// <summary>
+    /// 拦截原生窗口关闭行为，将其转化为平滑的 Dismiss 隐藏逻辑，避免进程被提前销毁。
+    /// </summary>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         if (Application.Current != null && !Application.Current.Dispatcher.HasShutdownStarted)
@@ -629,6 +691,9 @@ public partial class ResultWindow : Window
         }
     }
 
+    /// <summary>
+    /// 背景半透明蒙版点击事件：若已解锁关闭权限，则平滑退出。
+    /// </summary>
     private void OnBackgroundMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (_canClose && !_isClosing)
@@ -637,12 +702,18 @@ public partial class ResultWindow : Window
         }
     }
 
+    /// <summary>
+    /// 卡片主面板点击拦截事件：阻止事件向上传递至背景蒙版，防止误关。
+    /// </summary>
     private void OnPanelMouseDown(object sender, MouseButtonEventArgs e)
     {
         // 阻止点击卡片内容时误触发关闭
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 全局键盘快捷键响应：Esc / Enter / 空格键在解锁后均可快速关闭结果窗口。
+    /// </summary>
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
         if (_canClose && !_isClosing && (e.Key == Key.Escape || e.Key == Key.Enter || e.Key == Key.Space))
@@ -651,6 +722,10 @@ public partial class ResultWindow : Window
         }
     }
 
+    /// <summary>
+    /// 处理面向结果浮窗模块的 IPC 消息分发（ShowWindow, CloseWindow, ApplyNewProp, Destroy）。
+    /// </summary>
+    /// <param name="msg">IPC 消息包。</param>
     private void OnIpcMessageReceived(IpcMessage msg)
     {
         Dispatcher.Invoke(() =>

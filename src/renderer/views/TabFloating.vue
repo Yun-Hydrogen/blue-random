@@ -85,7 +85,7 @@
               <input ref="iconFileInput" type="file" accept="image/*" @change="handleIconPick" style="display:none" />
             </div>
             <div class="icon-path-row icon-path-sub">
-              <span class="cfg-hint">图片将以 base64 存储到配置文件中</span>
+              <span class="cfg-hint">图片将作为自定义资源独立存储并引用</span>
               <rizui_button text="恢复默认" :color="tabTheme" @click="resetIcon" />
             </div>
           </div>
@@ -166,7 +166,9 @@ const posY = computed({
   }
 })
 
-/* 实时读取悬浮按钮当前屏幕位置；未手动编辑时同步到输入框 */
+/**
+ * 实时从宿主读取悬浮按钮当前屏幕物理位置；未手动编辑时同步到输入框中。
+ */
 async function refreshLivePosition() {
   try {
     const pos = await window.configPanelApi?.getFloatingPosition?.()
@@ -227,9 +229,8 @@ const iconPlaceholder = computed(() => {
  */
 const iconPreviewSrc = computed(() => previewDataUrl.value || defaultIcon)
 
-/*
- *  loadCustomIcon — 按 customIconId 从 customs/ 拉取资源并组 data URL 供预览。
- *  在组件挂载时与 customIconId 变化时调用。
+/**
+ * 按 customIconId 从 customs/ 拉取资源并组装 data URL 供本地预览。
  */
 async function loadCustomIcon() {
   const id = props.fb.customIconId
@@ -262,29 +263,11 @@ const effectivePreviewSize = computed(() => {
 //  2. 文件选择：读取图片 → 上传到 customs/ 目录 → 配置存引用
 // ================================================================
 
-/*
- *  处理文件选择器的 change 事件。
- *
- *    1. 从 e.target.files[0] 获取用户选择的文件
- *    2. 用 FileReader.readAsDataURL() 读取为 data URL，解析出 mimeType + base64
- *    3. 通过 configPanelApi.saveCustomStaged() 将数据暂存到主进程内存
- *       （不落盘；点击“应用”保存配置时才写入 customs/，未应用则被舍弃）
- *    4. emit('update:fb', { customIconId: stagedId })
- *    5. 清空 input.value 以允许重复选择同一文件
- *
- *  注意：
- *    - 读取/暂存均为异步，emit 在回调中执行
- *    - 大图片（>1MB）的 base64 会很大，建议用户使用小尺寸图标
- */
-/*
- * convertImageToPng(file) —— 将用户选择的任意格式图片（包括 WebP、SVG、AVIF、JPEG、BMP、PNG 等）
- * 通过 HTML5 Canvas 转码为标准的 32 位 PNG，并限制最大分辨率（256px）。
- *
- * 原因：
- *   1. Windows 系统的 WIC (Windows Imaging Component) 在未安装扩展解码器时不支持 WebP / SVG，
- *      直接将 WebP/SVG 传给 WPF 会抛出 WINCODEC_ERR_COMPONENTNOTFOUND (0x88982F50) 异常。
- *   2. 转码为标准 PNG 可以保证在所有 Windows 版本上 100% 原生无缝解码显示。
- *   3. 适当缩放到最大 256x256，既保证了高清显示，又大幅减少 base64 体积和配置文件内存占用。
+/**
+ * 将用户选择的任意格式图片通过 HTML5 Canvas 转码为标准的 32 位 PNG，并限制最大分辨率（256px）。
+ * 消除 Windows WIC (Windows Imaging Component) 因缺少 WebP/SVG 编解码器导致的 WINCODEC 0x88982F50 异常。
+ * @param {File} file - 用户选择的原始图像文件
+ * @returns {Promise<{dataUrl: string, base64: string, mimeType: string}>}
  */
 function convertImageToPng(file) {
   return new Promise((resolve, reject) => {
@@ -327,6 +310,10 @@ function convertImageToPng(file) {
   })
 }
 
+/**
+ * 处理用户选择自定义图标文件的 change 事件并提交暂存。
+ * @param {Event} e - 文件选取事件
+ */
 async function handleIconPick(e) {
   const file = e.target.files[0]
   if (!file) return
@@ -358,9 +345,8 @@ async function handleIconPick(e) {
 //  3. 图标重置：恢复默认图标设置
 // ================================================================
 
-/*
- *  清空 customIconId（使用默认图标），图标尺寸恢复为 48px。
- *  旧资源文件在“应用”保存配置时由主进程统一删除（未应用则不落盘）。
+/**
+ * 清空 customIconId（恢复默认图标），图标尺寸恢复为 48px。
  */
 function resetIcon() {
   previewDataUrl.value = ''

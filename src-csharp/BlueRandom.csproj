@@ -36,7 +36,7 @@
 
   <!-- 内嵌资源：将 UIAccess、公共素材以及 Vite 编译后的前端静态页面完整内嵌到单文件二进制中 -->
   <ItemGroup>
-    <EmbeddedResource Include="..\uiaccess.dll">
+    <EmbeddedResource Include="..\third_party\uiaccess.dll">
       <LogicalName>BlueRandom.uiaccess.dll</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\public\**\*">

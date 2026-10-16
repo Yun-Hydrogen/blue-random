@@ -19,7 +19,11 @@
     - 入参可带或不带前导斜杠，内部会统一去除。
     - 仅在渲染进程使用（依赖 window.location）。
 ================================================================================
-*/
+/**
+ * 把 public 静态资源的相对路径解析为当前运行协议下可正常访问的完整绝对 URL。
+ * @param {string} relativePath - 资源相对路径（如 '/image/Letter_Rainbow.png'）
+ * @returns {string} 可在 <img> 或 fetch 使用的有效 URL
+ */
 export function resolveAssetUrl(relativePath) {
   const base = window.location.protocol === 'file:'
     ? new URL('.', window.location.href).toString()

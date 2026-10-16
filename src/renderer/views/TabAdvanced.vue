@@ -435,6 +435,9 @@ const showTaskDialog = ref(false)
 const taskDialogTitle = ref('')
 const taskDialogMsg = ref('')
 
+/**
+ * 触发创建或更新开机自启 Windows 计划任务，并弹出反馈结果对话框。
+ */
 async function handleCreateTask() {
   try {
     const result = await window.configPanelApi?.createStartupTask({
@@ -503,11 +506,18 @@ const securityDialog = reactive({
   busy: false
 })
 
-/* 开关切换：关闭 → 开启（设置密码）；开启 → 关闭（验证当前密码） */
+/**
+ * 响应密码保护开关切换事件。
+ * @param {boolean} on - 目标状态
+ */
 function onSecurityToggle(on) {
   openSecurityDialog(on ? 'enable' : 'disable')
 }
 
+/**
+ * 打开安全管理对话框（支持 'enable', 'change', 'disable' 模式）。
+ * @param {'enable'|'change'|'disable'} mode - 操作模式
+ */
 function openSecurityDialog(mode) {
   securityDialog.mode = mode
   securityDialog.title = mode === 'enable' ? '开启密码保护'
@@ -519,6 +529,9 @@ function openSecurityDialog(mode) {
   securityDialog.show = true
 }
 
+/**
+ * 提交安全管理操作（设置、更改或取消密码）。
+ */
 async function confirmSecurity() {
   if (securityDialog.busy) return
   const { mode, oldPwd, newPwd, confirmPwd } = securityDialog

@@ -2,7 +2,7 @@
 ================================================================================
   组件：ConfigPanel.vue
   所属：配置面板窗口的根组件
-  路由：/config-panel（由 main.js 通过 BrowserWindow 直接加载，不经过 vue-router）
+  路由：/config-panel（承载于 C# WPF WebView2 容器 ConfigPanelWindow）
 
 ================================================================================
   一、功能概述
@@ -44,7 +44,7 @@
     - .config-left / .config-right 后渲染 → 覆盖在泡泡上方
     - 面板统一 rgba 透明度 0.4，泡泡从两侧均匀透出，不遮挡内容
 
-  窗口尺寸：980×680（windows.js createConfigPanelWindow），不可调整大小。
+  窗口尺寸：980×680（ConfigPanelWindow.xaml 980×680），不可调整大小。
   左侧 flex: 1.5，右侧 flex: 1（3:2 比例）。
 
 ================================================================================
@@ -52,11 +52,11 @@
 ================================================================================
 
   +-------------------------------------------------------------+
-  |  main.js / ipc.js（主进程）                                   |
-  |  - configPanelApi 提供 15 个 IPC 通道                        |
-  |  - 读取/写入 config.yml                                      |
+  |  C# 后端 (NativeBridge / YamlConfigService / ClassManager)  |
+  |  - 通过 WebView2 hostObjects 暴露 nativeBridge COM 对象       |
+  |  - 读取/写入 config.yaml                                     |
   +--------------------------+----------------------------------+
-                             | IPC (contextBridge)
+                             | WebView2 hostObjects 桥接
                              v
   +-------------------------------------------------------------+
   |  useConfigPanel.js（逻辑层）                                  |
@@ -392,12 +392,18 @@ const {
 /* 底部工具条方法 */
 const tabLogsRef = ref(null)
 
+/**
+ * 触发右侧日志组件重新从磁盘读取最新日志。
+ */
 function handleReloadLogs() {
   if (tabLogsRef.value?.reload) {
     tabLogsRef.value.reload()
   }
 }
 
+/**
+ * 调用系统默认浏览器打开 GitHub Issues 页面。
+ */
 function openIssues() {
   const url = 'https://github.com/Yun-Hydrogen/blue-random/issues'
   if (window.configPanelApi?.openUrl) {
@@ -407,6 +413,9 @@ function openIssues() {
   }
 }
 
+/**
+ * 调用系统默认浏览器打开 GitHub 开源项目仓库。
+ */
 function openGithub() {
   const url = 'https://github.com/Yun-Hydrogen/blue-random'
   if (window.configPanelApi?.openUrl) {
@@ -420,17 +429,28 @@ function openGithub() {
 const lockPassword = ref('')
 const forgetDialog = ref(false)
 
+/**
+ * 执行配置面板密码解锁验证。
+ */
 function doUnlock() {
   unlock(lockPassword.value)
 }
 
+/**
+ * 确认重置全量配置并解除密码锁定。
+ */
 async function confirmForget() {
   forgetDialog.value = false
   lockPassword.value = ''
   await forgetReset()
 }
 
-/* 注入 CSS 变量供全局控件跟随主题色 */
+/**
+ * 辅助函数：将 Hex 颜色值转换为带 Alpha 通道的 RGBA 字符串。
+ * @param {string} hex - 6位十六进制颜色代码 (如 '#66ccff')
+ * @param {number} alpha - 透明度数值 (0.0 - 1.0)
+ * @returns {string} rgba(...) 字符串
+ */
 function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
@@ -820,9 +840,7 @@ const rootStyle = computed(() => {
   transform: translateY(-1px);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
 }
-.footer-tool-btn:active {
-  transform: translateY(1px);
-}
+
 
 /* 右侧：圆形按钮（跨左侧两行高度，由父级 align-items:center 居中） */
 .footer-actions {

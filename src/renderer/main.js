@@ -20,7 +20,11 @@ import { setupNativeBridgeAdapter } from './bridge/nativeBridgeAdapter'
 // 初始化 WebView2 宿主桥接
 setupNativeBridgeAdapter()
 
-// 将渲染进程日志转发到主进程日志面板
+/**
+ * 将渲染进程日志安全转发到宿主统一日志系统。
+ * @param {string} level - 日志级别 ('warn' | 'error')
+ * @param {string} text - 格式化后的日志正文
+ */
 const logToMain = (level, text) => {
   if (window.logApi && typeof window.logApi.send === 'function') {
     window.logApi.send(level, text)

@@ -287,17 +287,14 @@ flowchart LR
 ## 九、 目录布局、单文件打包与系统托盘
 
 ### 9.1 运行时目录拓扑
-系统采用绿色便携的近端目录策略，所有配置文件与运行时日志均严格收敛在程序同级的 `configs/` 目录下：
+系统采用规范的用户主目录策略，所有配置文件、班级名单、自定义素材与运行时日志均收敛在 `%UserProfile%/.blue random/` 目录下，确保软件版本覆盖更新时用户数据永不丢失：
 ```
-BlueRandom/
-├── BlueRandom.exe       # C# .NET 10 单文件自包含可执行程序 (含运行时/托管DLL/压缩资源)
-├── uiaccess.dll         # 原生 UIAccess 提权注入动态链接库
-├── public/              # 静态美术、图标与默认音效素材
-├── dist/                # 前端 Vite 预编译生产页面 (提供给 WebView2 载入)
-└── configs/             # 运行时动态数据目录 (与 exe 同级)
-    ├── config.yaml      # 全局主配置文件
-    ├── log.txt          # 运行诊断滚动日志
-    └── .SHA256          # 管理员保护密码散列凭据
+%UserProfile%/.blue random/
+├── config.yaml          # 全局主配置文件
+├── log.txt              # 运行诊断滚动日志
+├── .SHA256              # 管理员保护密码散列凭据
+├── classes/             # 多班级名单目录 (classes_*.yaml)
+└── customs/             # 自定义素材库 (音频与自定义图标)
 ```
 
 ### 9.2 原生系统托盘体系 (TrayService)

@@ -1,3 +1,11 @@
+// ==============================================================================
+// 文件: ResourceCache.cs
+// 命名空间: BlueRandom.Core.Resources
+// 作用: 全局全内存静态资源缓存中心（Resource Cache）。
+//       提供零磁盘写盘、零 IO 延迟的前端 WebUI 产物、WPF 原生位图、私有 GDI+ 字体（UI.ttf）
+//       以及 WAV 音效流内存托管服务，深度集成 WebView2 虚拟域拦截器。
+// ==============================================================================
+
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -11,8 +19,9 @@ using BlueRandom.Services;
 namespace BlueRandom.Core.Resources;
 
 /// <summary>
-/// 资源缓存中心 (Resource Cache)
-/// 在程序启动或按需预加载 WebUI 界面、字体、信封纹理、角色立绘与音频流，所有内置资源全内存托管，零磁盘释放与零磁盘 IO 延迟
+/// 资源缓存中心 (Resource Cache)。
+/// 在程序启动或按需预加载 WebUI 界面、字体、信封纹理、角色立绘与音频流，
+/// 所有内置资源全内存托管，实现零临时文件落盘与亚毫秒级访问。
 /// </summary>
 public static class ResourceCache
 {
@@ -30,13 +39,17 @@ public static class ResourceCache
     private static FontFamily? _customFont;
 
     /// <summary>
-    /// 全局 UI 字体（南西新圆体）
+    /// 全局 UI 字体（南西新圆体）。
+    /// 若未完成自定义加载，则安全回退至系统字体备选链。
     /// </summary>
     public static FontFamily CustomFont => _customFont ?? new FontFamily("NanxiXinyuanti Regualr, 南西新圆体, Microsoft YaHei UI, Segoe UI");
 
     /// <summary>
-    /// 阶段 -1 极速硬加载：在任何原生窗口（包括 Splash 启动器）实例化前同步硬加载 UI.ttf 字体并私有注册至进程字体表，同时预载应用 Logo
+    /// 阶段 -1 极速硬加载：
+    /// 在任何原生 WPF 窗体（包括启动器 SplashWindow）初始化前同步执行，
+    /// 将 UI.ttf 私有注册至当前进程字体表，并预载主程序徽标与图标，杜绝首次渲染字体变形与白块闪烁。
     /// </summary>
+    /// <param name="baseDir">应用程序基目录 AppDomain.CurrentDomain.BaseDirectory。</param>
     public static void EarlyInit(string baseDir)
     {
         EnsureFont(baseDir);
@@ -45,8 +58,16 @@ public static class ResourceCache
     }
 
     /// <summary>
-    /// 同步确保字体已加载并私有注册至 Windows 进程字体表 (优先全内存载入，避免磁盘写文件)
+    /// 确保应用全局 UI.ttf（南西新圆体）已正确注入至当前进程字体表。
+    /// <para>
+    /// 加载策略：
+    /// 1. 优先探测本地发布目录或开发源码目录下的 public/fonts/UI.ttf；
+    ///    若存在，调用 Win32 GDI API <c>AddFontResourceEx(..., FR_PRIVATE, ...)</c> 将其私有映射至进程，避免污染宿主系统字体库；
+    /// 2. 若处于单文件打包环境或文件不存在，直接从 Assembly Manifest 嵌入资源流中读取字体二进制字节，
+    ///    调用 <c>AddFontMemResourceEx</c> 注入系统 GDI 内存字体句柄，全程无需向磁盘释放任何临时 .ttf 文件。
+    /// </para>
     /// </summary>
+    /// <param name="baseDir">基准路径。</param>
     public static void EnsureFont(string baseDir)
     {
         if (_customFont != null) return;
@@ -103,6 +124,14 @@ public static class ResourceCache
         }
     }
 
+    /// <summary>
+    /// 加载单张图片资源并缓存入并发字典。
+    /// 优先从本地磁盘检索，不存在时回退至程序集嵌入资源；
+    /// 无论何种途径，均通过 <c>BitmapCacheOption.OnLoad</c> 预先解码并将图片实例 <c>Freeze()</c> 冻结，
+    /// 保证位图对象可以跨 WPF STA 渲染线程安全共享而无需二次封送。
+    /// </summary>
+    /// <param name="baseDir">基准目录路径。</param>
+    /// <param name="imgName">目标图片文件名（如 BlueRandom.png、Letter_Rainbow.png）。</param>
     private static void LoadSingleImage(string baseDir, string imgName)
     {
         if (_images.ContainsKey(imgName)) return;
@@ -158,8 +187,17 @@ public static class ResourceCache
     }
 
     /// <summary>
-    /// 初始化并预热资源 (将前端资产、字体、图标与音效全部载入 ResCache 内存中)
+    /// 全局资源全量异步预热入口（Stage 1）。
+    /// <para>
+    /// 执行步骤：
+    /// 0. 安全清除历史版本残留于磁盘 ~/.blue random/webui 的旧目录缓存，实现零磁盘静态污染；
+    /// 1. 将 Vite 构建产物（HTML/CSS/JS/SVG）全量灌入内存并发字典 _webuiAssets；
+    /// 2. 加载并注册 UI.ttf 字体；
+    /// 3. 并行解码并冻结三色信封纹理、阿罗娜/普拉娜立绘、托盘图标；
+    /// 4. 预载并缓存抽卡点击核心 WAV 音效。
+    /// </para>
     /// </summary>
+    /// <param name="baseDir">应用程序根目录路径。</param>
     public static void Preload(string baseDir)
     {
         AppLogger.Info("ResourceCache", "开始预热 ResCache 全内存素材与 WebUI 前端资产...");
@@ -244,8 +282,10 @@ public static class ResourceCache
     }
 
     /// <summary>
-    /// 预加载 WebUI 界面产物至内存字典
+    /// 将前端 Vite 打包产物（dist 目录或嵌入清单流）完整加载至内存映射字典。
+    /// 无论运行于标准文件夹还是单文件独立打包（Single-File Executable），均保证虚拟域能够直接读取二进制字节流。
     /// </summary>
+    /// <param name="baseDir">程序运行根目录。</param>
     private static void PreloadWebUiAssets(string baseDir)
     {
         _webuiAssets.Clear();
@@ -309,8 +349,11 @@ public static class ResourceCache
     }
 
     /// <summary>
-    /// 从 ResCache 内存中检索 WebUI 资源
+    /// 从内存字典检索 WebUI 资源二进制内容。
+    /// 当客户端请求空路径或根路径时，自动归一化解析为 "index.html"。
     /// </summary>
+    /// <param name="relativePath">相对 URI 路径（如 "assets/index.js"）。</param>
+    /// <returns>资源二进制字节数组；若未命中则返回 null。</returns>
     public static byte[]? GetWebUiAsset(string relativePath)
     {
         if (_webuiAssets.IsEmpty)
@@ -323,16 +366,20 @@ public static class ResourceCache
     }
 
     /// <summary>
-    /// 获取已缓存的图片纹理
+    /// 从内存预热池中快速获取已冻结（Frozen）的 WPF 原生位图资源。
     /// </summary>
+    /// <param name="key">图片键名（如 "BlueRandom.png"、"Arona_Plana.png"）。</param>
+    /// <returns>可跨线程直接绑定的 ImageSource；未找到时返回 null。</returns>
     public static ImageSource? GetImage(string key)
     {
         return _images.TryGetValue(key, out var img) ? img : null;
     }
 
     /// <summary>
-    /// 获取信封图片 (rainbow / gold / blue)
+    /// 根据抽卡结果的信封颜色品阶，获取对应的信封纹理贴图。
     /// </summary>
+    /// <param name="letterColor">信封等级代号（"rainbow" 三星彩、"gold" 二星金、"blue" 一星蓝）。</param>
+    /// <returns>对应的信封 ImageSource。</returns>
     public static ImageSource? GetEnvelopeImage(string letterColor)
     {
         string key = (letterColor?.ToLowerInvariant()) switch
@@ -345,8 +392,10 @@ public static class ResourceCache
     }
 
     /// <summary>
-    /// 获取音频二进制流
+    /// 获取内存中已缓存的音频二进制数据。
     /// </summary>
+    /// <param name="key">音频文件名（如 "button_click.wav"）。</param>
+    /// <returns>音频二进制字节数组；不存在时返回 null。</returns>
     public static byte[]? GetAudioBytes(string key)
     {
         return _audioBytes.TryGetValue(key, out var bytes) ? bytes : null;

@@ -1,3 +1,10 @@
+// ==============================================================================
+// 文件: ConfigModel.cs
+// 命名空间: BlueRandom.Core.Config
+// 作用: 定义应用配置的强类型对象模型（DTO），包含 YAML 与 JSON 序列化映射别名。
+//       覆盖学生数据、悬浮按钮样式、抽卡弹窗声效、管理员提权与 UIAccess 策略。
+// ==============================================================================
+
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using YamlDotNet.Serialization;

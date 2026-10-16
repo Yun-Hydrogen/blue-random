@@ -1,3 +1,11 @@
+// ==============================================================================
+// 文件: WindowsSystemService.cs
+// 命名空间: BlueRandom.Services
+// 作用: Windows 系统级安全权限、UAC 提权、UIAccess 桌面穿透与计划任务自启服务。
+//       提供嵌入式 uiaccess.dll 自动解析与解压加载器（DllImportResolver）、
+//       防死循环标志自愈仲裁（--elevatedadmin / --elevateduia）以及 Win32 顶层 Z 序保活。
+// ==============================================================================
+
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -8,14 +16,19 @@ using BlueRandom.Core.Logging;
 namespace BlueRandom.Services;
 
 /// <summary>
-/// Windows 系统权限与能力服务
-/// 处理管理员提权、UIAccess、计划任务与防遮挡置顶
+/// Windows 系统权限与能力服务。
+/// 处理管理员提权、UIAccess、计划任务与防遮挡置顶，提供深层次系统交互能力。
 /// </summary>
 public static class WindowsSystemService
 {
     private const string ArgElevatedAdmin = "--elevatedadmin";
     private const string ArgElevatedUia = "--elevateduia";
 
+    /// <summary>
+    /// 静态构造函数。
+    /// 注册当前程序集的 DllImportResolver，拦截对 uiaccess.dll 的 P/Invoke 动态加载请求，
+    /// 自动重定向至通过 GetUiAccessDllPath 探测或提取的物理文件路径。
+    /// </summary>
     static WindowsSystemService()
     {
         if (OperatingSystem.IsWindows())
@@ -40,8 +53,16 @@ public static class WindowsSystemService
     }
 
     /// <summary>
-    /// 获取 uiaccess.dll 的绝对路径 (多路径智能检索 + 单文件内嵌自释放)
+    /// 获取 uiaccess.dll 的绝对物理文件路径。
+    /// <para>
+    /// 检索与自愈流程：
+    /// 1. 扫描当前工作目录、程序目录及第三方 third_party 候选路径；
+    /// 2. 检查用户数据目录 ~/.blue random/uiaccess.dll；
+    /// 3. 若物理磁盘均不存在，自动从当前程序集清单嵌入资源（EmbeddedResource）中流式读取，
+    ///    并释放至 ~/.blue random/uiaccess.dll，实现单文件部署模式下的无感运行。
+    /// </para>
     /// </summary>
+    /// <returns>uiaccess.dll 的绝对路径。</returns>
     public static string GetUiAccessDllPath()
     {
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -95,8 +116,9 @@ public static class WindowsSystemService
     }
 
     /// <summary>
-    /// 检测系统中是否存在可用的 uiaccess.dll（包含单文件内置资源检测）
+    /// 检测系统中是否存在可用的 uiaccess.dll（覆盖外部物理磁盘检索与程序集内置嵌入资源两重探测）。
     /// </summary>
+    /// <returns>存在或可自动解压释放返回 true，完全缺失返回 false。</returns>
     public static bool DoesUiAccessDllExist()
     {
         string path = GetUiAccessDllPath();
@@ -130,8 +152,9 @@ public static class WindowsSystemService
     private static extern uint WTSGetActiveConsoleSessionId();
 
     /// <summary>
-    /// 当前进程是否以管理员权限运行
+    /// 检查当前进程 Primary Token 是否已拥有 Windows 内置管理员角色（Administrator）。
     /// </summary>
+    /// <returns>以高权限（Elevated）运行返回 true，普通标准权限返回 false。</returns>
     public static bool IsProcessElevated()
     {
         if (!OperatingSystem.IsWindows()) return false;
@@ -149,8 +172,10 @@ public static class WindowsSystemService
     }
 
     /// <summary>
-    /// 当前进程是否以 UIAccess 权限运行
+    /// 检查当前进程是否已具备 UIAccess（User Interface Access）特权。
+    /// UIAccess 特权允许窗口置顶于普通 Administrator 窗口及全屏游戏之上，防止悬浮球被抢占遮挡。
     /// </summary>
+    /// <returns>已激活 UIAccess 模式返回 true，否则返回 false。</returns>
     public static bool IsProcessUiAccess()
     {
         if (!OperatingSystem.IsWindows()) return false;
@@ -165,9 +190,20 @@ public static class WindowsSystemService
     }
 
     /// <summary>
-    /// 检查并按需执行管理员提权（带防死循环检测）
+    /// 检查并按需执行管理员 UAC 提权重启流程。
+    /// <para>
+    /// 关键自愈机制（死循环拦截）：
+    /// 1. 若当前配置未开启 requireAdmin，直接跳过；
+    /// 2. 若当前已具备管理员权限，直接跳过；
+    /// 3. 若检测到命令行参数中已存在 <c>--elevatedadmin</c> 标志但仍然未拥有管理员权限，
+    ///    证明上一轮弹出的 Windows UAC 提权对话框已被用户主动点击“否”拒绝；
+    ///    此时立即中止重复提权尝试，降级为普通权限继续运行，彻底杜绝死循环弹窗；
+    /// 4. 首次提权时附带 <c>--elevatedadmin</c> 参数并使用 "runas" 动词重启进程，当前低权限实例退出。
+    /// </para>
     /// </summary>
-    /// <returns>若已触发重启退出返回 true，继续运行返回 false</returns>
+    /// <param name="args">当前实例接收到的原始命令行参数数组。</param>
+    /// <param name="requireAdmin">配置是否要求以管理员权限启动。</param>
+    /// <returns>若已成功唤起新提权进程且当前实例需退出返回 true；无需提权或用户拒绝后继续运行返回 false。</returns>
     public static bool HandleAdminElevation(string[] args, bool requireAdmin)
     {
         if (!requireAdmin) return false;
@@ -206,8 +242,19 @@ public static class WindowsSystemService
     }
 
     /// <summary>
-    /// 检查并按需执行 UIAccess 重启（需前置具备管理员权限，带防死循环检测）
+    /// 检查并按需执行 UIAccess 特权进程拉起重启流程。
+    /// <para>
+    /// 核心原理与安全防护：
+    /// 1. UIAccess 要求当前发起方必须先行具备 Administrator 权限；若非管理员则安全放弃；
+    /// 2. 死循环防护：若已携带 <c>--elevateduia</c> 参数但未能成功获得 UIA 标志，跳过提权平稳运行；
+    /// 3. 获取活动控制台会话 ID（WTSGetActiveConsoleSessionId），通过 uiaccess.dll 导出的 StartUIAccessProcess
+    ///    将当前可执行程序注入该 Session 并附加 UIA 令牌；
+    /// 4. 成功拉起后当前进程正常退出。
+    /// </para>
     /// </summary>
+    /// <param name="args">命令行参数数组。</param>
+    /// <param name="requireUia">配置是否开启 UIAccess 桌面穿透置顶。</param>
+    /// <returns>若成功拉起新 UIAccess 实例且当前进程应退出返回 true，否则返回 false。</returns>
     public static bool HandleUiAccessElevation(string[] args, bool requireUia)
     {
         if (!requireUia) return false;
@@ -263,8 +310,11 @@ public static class WindowsSystemService
     }
 
     /// <summary>
-    /// 为指定原生窗口刷新置顶层级
+    /// 为指定的原生 HWND 窗口句柄强制重设 HWND_TOPMOST 置顶 Z 序。
+    /// 组合使用 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE，
+    /// 在不抢夺当前用户键盘输入焦点与活动窗口的前提下，保证悬浮球恒处于最上层。
     /// </summary>
+    /// <param name="hWnd">目标窗口的 Win32 HWND 句柄。</param>
     public static void RefreshTopMost(IntPtr hWnd)
     {
         if (hWnd == IntPtr.Zero) return;
@@ -280,8 +330,18 @@ public static class WindowsSystemService
     }
 
     /// <summary>
-    /// 创建或更新 Windows 开机启动计划任务 (schtasks)
+    /// 创建或覆盖更新 Windows 登录自启动计划任务（schtasks）。
+    /// <para>
+    /// 机制优势：
+    /// 采用 Windows Task Scheduler（/sc onlogon）替代传统 Run 注册表启动项；
+    /// 当配合 /rl highest（以最高管理员权限运行）时，系统在用户开机登录时可静默以管理员提权启动，
+    /// 完全跳过每次开机令人烦扰的 Windows UAC 弹窗提示。
+    /// </para>
     /// </summary>
+    /// <param name="taskName">计划任务名称（默认 "Blue Random (Admin)"）。</param>
+    /// <param name="exePath">待启动的 exe 完整物理路径。</param>
+    /// <param name="asAdmin">是否以管理员最高权限运行（/rl highest）。</param>
+    /// <returns>创建或更新成功返回 true，执行 schtasks 异常返回 false。</returns>
     public static bool CreateStartupTask(string taskName, string exePath, bool asAdmin)
     {
         try

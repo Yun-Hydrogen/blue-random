@@ -8,7 +8,7 @@
 - 技术：Vue 3 `<script setup>` + `vue-router`。
 
 ## 页面结构（Template）
-- `<router-view />`：由 `src/renderer/router/index.js` 决定渲染 Floating / PickResult / ConfigPanel。
+- `<router-view />`：由 `src/renderer/router/index.js` 渲染 ConfigPanel 配置面板。
 
 ## 关键逻辑
 - 全局强制亮色：setup 阶段一次性设置 `<html data-rizui-theme="light">`，
@@ -16,7 +16,7 @@
 - `watch(route.path)`：监听路由变化，当路径为 `/config-panel` 时为 `<html>`
   和 `<body>` 添加 `is-config-page` class，其余路径移除。
   - `is-config-page`：启用不透明背景、允许滚动、允许文本选择（配置页）。
-  - 无 `is-config-page`：透明背景、禁止溢出、禁止文本选择（悬浮窗/结果页）。
+  - 无 `is-config-page`：透明背景、禁止溢出、禁止文本选择。
 
 ## 全局样式
 - `* { box-sizing: border-box; }` 统一盒模型。

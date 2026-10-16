@@ -68,23 +68,23 @@
   三、API 映射表（window.configPanelApi → NativeBridge / C# 后端服务）
 ================================================================================
 
-  Composable 方法              | preload API                    | IPC 通道
+  Composable 方法              | nativeBridgeAdapter API         | C# NativeBridge 方法
   ─────────────────────────────┼────────────────────────────────┼────────────────────────────
-  fetchAppInfo()               | configPanelApi.getAppInfo()    | config-panel:get-app-info
-  handleApply() → saveConfig() | configPanelApi.saveConfig()   | config-panel:save-config
-  resetConfig()                | configPanelApi.resetConfig()   | config-panel:reset-config
-  createStartupTask()          | configPanelApi.createStartup.. | config-panel:create-startup-task
-  adminElevate()               | configPanelApi.adminElevate()  | config-panel:admin-elevate
-  appRestart()                 | configPanelApi.restart()       | config-panel:restart
-  checkUpdate()                | configPanelApi.checkUpdate()   | config-panel:check-update
-  openConfigFile()             | configPanelApi.openConfigFile()| config-panel:open-config-file
-  showInExplorer()             | configPanelApi.openConfigDir() | config-panel:open-config-dir
-  closeWithAnimation()         | configPanelApi.close()         | config-panel:close（send）
+  fetchAppInfo()               | configPanelApi.getAppInfo()    | GetAppInfoJson()
+  handleApply() → saveConfig() | configPanelApi.saveConfig()   | SaveConfigYaml(yaml)
+  resetConfig()                | configPanelApi.resetConfig()   | ResetConfig()
+  createStartupTask()          | configPanelApi.createStartup.. | CreateStartupTask(task, exe, admin)
+  adminElevate()               | configPanelApi.adminElevate()  | AdminElevate()
+  appRestart()                 | configPanelApi.restart()       | Restart()
+  checkUpdate()                | configPanelApi.checkUpdate()   | CheckUpdateJson()
+  openConfigFile()             | configPanelApi.openConfigFile()| OpenConfigFolder()
+  showInExplorer()             | configPanelApi.openConfigDir() | OpenConfigFolder()
+  closeWithAnimation()         | configPanelApi.close()         | CloseWindow()
 
-  注：configPanelApi 由 src/preload/preload.js 通过 contextBridge 注入。
+  注：configPanelApi 由 src/renderer/bridge/nativeBridgeAdapter.js 注入并适配自 WebView2 宿主对象 nativeBridge。
 
 ================================================================================
-  四、draft 状态对象结构（与 config.yml / DEFAULT_CONFIG 一一对应）
+  四、draft 状态对象结构（与 config.yaml / ConfigModel 一一对应）
 ================================================================================
 
   draft = {
@@ -112,7 +112,7 @@
 ================================================================================
 
   - 新增配置字段时，需在 3 处同步更新：
-      1. src/main/config.js 的 DEFAULT_CONFIG + normalizeConfig
+      1. src-csharp/Core/Config/ConfigModel.cs 与 YamlConfigService.cs
       2. 本文件的 draft 初始值
       3. 对应的子组件（TabRoster / TabFloating / TabResult / TabAdvanced）
   - draft 使用 reactive() 包裹，深层属性也是响应式的，可直接 draft.xxx.yyy = zzz
@@ -431,16 +431,15 @@ export function useConfigPanel() {
   }
 
   // ============================================================
-  //  第 5 部分：Tab 4 高级设置 — IPC 操作封装
+  //  第 5 部分：Tab 4 高级设置 — 桥接调用封装
   //
-  //  这些函数封装了渲染进程 → 主进程的 IPC 调用。
+  //  这些函数封装了渲染进程 → C# 宿主的通信调用。
   //  所有调用都通过 window.configPanelApi 进行，
-  //  configPanelApi 由 preload.js 通过 contextBridge 注入。
+  //  由 nativeBridgeAdapter.js 将 WebView2 COM 宿主对象包装为 Promise API。
   //
-  //  安全设计：
-  //    渲染进程不能直接访问 Node.js API（fs、child_process 等），
-  //    必须通过 preload 暴露的有限接口与主进程通信。
-  //    这保证了即使渲染进程被 XSS 攻击，也无法直接操作系统。
+  //  架构设计：
+  //    WebUI 运行在 WebView2 沙箱中，通过 NativeBridge
+  //    受控地调用 C# 宿主提供的系统、文件与配置管理服务。
   // ============================================================
 
   /*

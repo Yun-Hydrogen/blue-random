@@ -1,3 +1,10 @@
+// ============================================================================
+// 文件名称: IpcBrokerTests.cs
+// 项目名称: BlueRandom.Tests
+// 文件说明: 进程内异步消息总线 (IpcBroker) 的单元测试
+// 核心职责: 验证跨模块发布/订阅 (Pub/Sub) 模式的消息分发与动作谓词过滤
+// ============================================================================
+
 using System;
 using System.Threading;
 using BlueRandom.Core.Ipc;
@@ -5,8 +12,14 @@ using Xunit;
 
 namespace BlueRandom.Tests;
 
+/// <summary>
+/// 进程内消息总线单元测试集
+/// </summary>
 public class IpcBrokerTests
 {
+    /// <summary>
+    /// 验证订阅者能够正确接收发往指定目标模块的命令与负载消息
+    /// </summary>
     [Fact]
     public void IpcBroker_PubSub_DeliversMessage()
     {
@@ -29,6 +42,9 @@ public class IpcBrokerTests
         Assert.Equal("test-payload", receivedPayload);
     }
 
+    /// <summary>
+    /// 验证消息谓词动作过滤机制（如仅处理 Post 动作），防止无用消息干扰业务状态机
+    /// </summary>
     [Fact]
     public void IpcBroker_ActionFiltering_Works()
     {

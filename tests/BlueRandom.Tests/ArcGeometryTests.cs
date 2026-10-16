@@ -1,3 +1,10 @@
+// ============================================================================
+// 文件名称: ArcGeometryTests.cs
+// 项目名称: BlueRandom.Tests
+// 文件说明: 弧形气泡胶囊与控制按钮几何渲染算法的单元与回归测试
+// 核心职责: 验证 WPF PathGeometry 弧形路径、圆角封口与 RenderTargetBitmap 光栅化有效性
+// ============================================================================
+
 using System;
 using System.IO;
 using System.Windows;
@@ -7,8 +14,14 @@ using Xunit;
 
 namespace BlueRandom.Tests;
 
+/// <summary>
+/// 悬浮窗弧形菜单几何构型测试类
+/// </summary>
 public class ArcGeometryTests
 {
+    /// <summary>
+    /// 验证弧形胶囊环形带几何拓扑绘制与 WPF 离屏位图光栅化渲染管线
+    /// </summary>
     [Fact]
     public void TestRenderArc()
     {

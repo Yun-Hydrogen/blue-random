@@ -11,7 +11,7 @@
 | 文档名称 | 核心内容 | 适用受众 |
 | :--- | :--- | :--- |
 | 📘 **[程序整体架构设计说明书](./ARCHITECTURE.md)** | 重构背景与设计哲学、单进程 4 线程拓扑模型、双重内存缓存（Config Cache 与 Resource Cache）、纯领域抽卡算法 (LotteryEngine)、5 阶段原子启动与自愈流水线、原生 UI 实现原理及系统安全性。 | 架构师、核心开发人员、二次开发者 |
-| 📡 **[跨线程通信拓扑与 IPC 协议规范](./COMMUNICATION_TOPOLOGY.md)** | 进程内 `@IPC` 异步无锁通信通道模型、四种动作语义（`INIT`, `DEST`, `GET`, `POST`）、各模块（`@IPC`, `@FCB`, `@FRW`, `@CP`）报文参数定义、`NativeBridge` 直连架构与全景业务交互时序图。 | UI 开发者、通信集成人员、调试维护人员 |
+| 🔌 **[通信拓扑与 IPC 接口规范说明书](./ipc.md)** | 基于最新 C# (.NET 10) 与 WebView2 原生代码编写的通信 API 完全手册，覆盖 `IpcBroker` 消息总线全指令、`NativeBridge` 26+ COM 接口、前端 `window.configPanelApi` / `logApi` 适配层与全景交互时序。 | 全栈开发者、前后端通信调试人员 |
 
 ---
 
@@ -84,10 +84,10 @@ dotnet publish src-csharp/BlueRandom.csproj -c Release -r win-x64 --self-contain
 ## 四、 持续集成与自动化构建 (CI/CD)
 
 项目通过 GitHub Actions 实现完整的持续集成管线：
-- **开发版工作流**：`.github/workflows/build-windows-dev.yml`
-  - 监听 `NEXT-Dev`、`neo-dev` 分支 push 与 PR。
-  - 自动执行 Node.js 前端编译、.NET 10 单元测试，输出单一可执行文件 `BlueRandom-Dev-v*-win-x64.exe` 构件供内部测试。
-- **正式发布工作流**：`.github/workflows/build-windows.yml`
-  - 监听 `neo`、`NEXT`、`main` 分支及 `v*` 语义化版本 Tag。
-  - 自动运行测试并发布单一可执行文件 `BlueRandom-v*-win-x64.exe` 的 GitHub Release。
+- **持续集成构建工作流 (CI Build)**：`.github/workflows/ci.yml`
+  - 自动触发：监听 `main`、`NEXT`、`NEXT-Dev`、`neo`、`neo-dev` 分支的 push 与 PR（亦支持手动触发）。
+  - 自动执行 Node.js 前端编译、.NET 10 单元测试，发布单文件独立构建产物并上传为 CI Artifact（绝不自动发布 Release）。
+- **正式发布工作流 (Release)**：`.github/workflows/release.yml`
+  - 仅手动触发：支持 `workflow_dispatch` 并在页面选择是否为草稿或预发布。
+  - 读取 `package.json` 中的 `version` 与 `codename`，生成 `[代号]-v[版本号]` 格式 Tag 与 Release 标题，自动创建 GitHub Release 并附带单一可执行文件。
 

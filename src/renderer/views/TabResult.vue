@@ -187,9 +187,10 @@ const tabTheme = '#55cc99'
  */
 const opacityPercent = computed(() => Math.round((props.pickResult.panelOpacity || 0.9) * 100))
 
-/*
- *  秒数 → MM:SS 格式化
- *  用于 BGM 起始位置 hint 的动态显示
+/**
+ * 将秒数格式化为分秒展示格式 (MM:SS)。
+ * @param {number} sec - 秒数
+ * @returns {string} 格式化时间字符串
  */
 function formatTime(sec) {
   const s = Math.max(0, Math.round(sec || 0))
@@ -238,9 +239,8 @@ const playMusicHint = computed(() => hasBgm.value
   ? '抽取时播放完整的背景音乐'
   : '请先上传背景音乐后才能启用')
 
-/*
- * 按 bgmCustomId 从 customs/ 拉取 BGM 信息（文件名、时长），并缓存试听 data URL。
- * 在组件挂载时与 bgmCustomId 变化时调用；若起始位置超过新时长则回退到 0。
+/**
+ * 按 bgmCustomId 从 customs/ 拉取 BGM 元数据，并缓存试听 data URL。
  */
 async function loadBgmInfo() {
   const id = props.pickResult.bgmCustomId
@@ -282,9 +282,10 @@ onMounted(() => {
 watch(() => props.pickResult.bgmCustomId, () => { loadBgmInfo() })
 watch(() => props.pickResult.gachaSoundCustomId, () => { loadGachaInfo() })
 
-/*
- * 用 HTMLAudioElement 探测音频：可解码则返回时长（秒），失败 reject。
- * 这是上传时的“文件合法性校验”。
+/**
+ * 利用 HTMLAudioElement 探针探测音频时长与可解码性。
+ * @param {string} dataUrl - 音频 Data URL
+ * @returns {Promise<{duration: number}>}
  */
 function probeAudio(dataUrl) {
   return new Promise((resolve, reject) => {
@@ -300,12 +301,9 @@ function probeAudio(dataUrl) {
   })
 }
 
-/*
- * 处理背景音乐文件选择：
- *   1. 扩展名/类型预检（音频白名单）
- *   2. HTMLAudioElement 校验可解码性并获取时长（probeAudio）
- *   3. 暂存到主进程内存（saveCustomStaged，不落盘；点击“应用”时才写入 customs/）
- *   4. emit bgmCustomId（staged 引用）；时间轴随之同步到音乐时长
+/**
+ * 处理背景音乐文件选择：格式校验、时长解析与内存暂存。
+ * @param {Event} e - 文件变更事件
  */
 async function handleBgmPick(e) {
   const file = e.target.files[0]
@@ -358,7 +356,9 @@ async function handleBgmPick(e) {
   reader.readAsDataURL(file)
 }
 
-/* 移除背景音乐：清空引用并关闭播放开关；旧资源在“应用”时由主进程删除 */
+/**
+ * 移除背景音乐关联并重置播放状态。
+ */
 function removeBgm() {
   stopPreview()
   bgmInfo.value = null
@@ -366,7 +366,9 @@ function removeBgm() {
   emit('update:pickResult', { ...props.pickResult, bgmCustomId: '', playMusic: false })
 }
 
-/* 试听：从 customs 加载的 data URL 播放，从当前起始位置开始，音量跟随配置 */
+/**
+ * 切换背景音乐试听回放。
+ */
 async function previewBgm() {
   if (previewPlaying.value) { stopPreview(); return }
   if (!props.pickResult.bgmCustomId) return
@@ -411,7 +413,9 @@ const playGachaHint = computed(() => hasGachaSound.value
   ? '抽取时播放短促的提示音'
   : '请先上传抽取音效后才能启用')
 
-/* 按 gachaSoundCustomId 从 customs/ 拉取抽取音效信息并缓存试听 data URL */
+/**
+ * 按 gachaSoundCustomId 从 customs/ 拉取抽取音效信息并缓存试听 data URL。
+ */
 async function loadGachaInfo() {
   const id = props.pickResult.gachaSoundCustomId
   if (!id) { gachaInfo.value = null; gachaPreviewUrl.value = ''; return }
@@ -430,12 +434,9 @@ async function loadGachaInfo() {
   }
 }
 
-/*
- * 处理抽取音效文件选择：
- *   1. 扩展名/类型预检（音频白名单）
- *   2. probeAudio 校验可解码性
- *   3. 暂存到主进程内存（saveCustomStaged，不落盘；“应用”时才写入 customs/）
- *   4. emit gachaSoundCustomId（staged 引用）
+/**
+ * 处理抽取音效文件选择与暂存。
+ * @param {Event} e - 文件变更事件
  */
 async function handleGachaPick(e) {
   const file = e.target.files[0]
@@ -482,7 +483,9 @@ async function handleGachaPick(e) {
   reader.readAsDataURL(file)
 }
 
-/* 移除抽取音效：清空引用并关闭播放开关；旧资源在“应用”时由主进程删除 */
+/**
+ * 移除抽取音效并清空播放状态。
+ */
 function removeGachaSound() {
   stopGachaPreview()
   gachaInfo.value = null
@@ -490,7 +493,9 @@ function removeGachaSound() {
   emit('update:pickResult', { ...props.pickResult, gachaSoundCustomId: '', defaultPlayGachaSound: false })
 }
 
-/* 试听：从 customs 加载的 data URL 播放，音量跟随配置 */
+/**
+ * 试听自定义抽取音效。
+ */
 async function previewGachaSound() {
   if (gachaPreviewPlaying.value) { stopGachaPreview(); return }
   if (!props.pickResult.gachaSoundCustomId) return
@@ -507,6 +512,9 @@ async function previewGachaSound() {
   } catch { /* 忽略音频加载错误 */ }
 }
 
+/**
+ * 停止抽取音效试听回放。
+ */
 function stopGachaPreview() {
   const audio = gachaPreviewAudio.value
   if (audio) {
@@ -517,6 +525,9 @@ function stopGachaPreview() {
   gachaPreviewPlaying.value = false
 }
 
+/**
+ * 停止背景音乐试听回放。
+ */
 function stopPreview() {
   const audio = previewAudio.value
   if (audio) {

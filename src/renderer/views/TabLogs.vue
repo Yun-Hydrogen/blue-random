@@ -97,6 +97,10 @@ let isPolling = false
 //  滚动与日志处理
 // ================================================================
 
+/**
+ * 滚动日志列表容器至最底部。
+ * @param {boolean} [smooth=false] - 是否使用平滑滚动动效
+ */
 function scrollToBottom(smooth = false) {
   nextTick(() => {
     if (logListRef.value) {
@@ -108,6 +112,11 @@ function scrollToBottom(smooth = false) {
   })
 }
 
+/**
+ * 格式化日志时间戳与显示文本字段。
+ * @param {object} entry - 原始日志对象
+ * @returns {{id: string, level: string, text: string, time: string}}
+ */
 function formatEntry(entry) {
   let displayTime = '--:--:--'
   if (entry.time) {
@@ -128,6 +137,9 @@ function formatEntry(entry) {
   }
 }
 
+/**
+ * 轮询宿主日志记录，计算增量新日志并更新列表与视口。
+ */
 async function pollLogs() {
   if (isPolling) return
   if (!window.configPanelApi?.getLogs) return
@@ -171,6 +183,9 @@ async function pollLogs() {
   }
 }
 
+/**
+ * 激活省电遮罩，启动后台定时器并首次获取日志。
+ */
 function loadLogs() {
   isLoaded.value = true
   pollLogs()
@@ -179,6 +194,9 @@ function loadLogs() {
   }
 }
 
+/**
+ * 强制重置增量游标并全量重新从磁盘读取日志。
+ */
 function reloadLogs() {
   isLoaded.value = true
   lastLogId = ''
@@ -189,6 +207,9 @@ function reloadLogs() {
   }
 }
 
+/**
+ * 清空前端日志显示视图并插入清空指示项。
+ */
 function clearLogs() {
   logs.value = []
   lastLogId = ''

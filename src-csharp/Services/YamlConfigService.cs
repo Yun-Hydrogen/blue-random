@@ -1,3 +1,11 @@
+// ==============================================================================
+// 文件: YamlConfigService.cs
+// 命名空间: BlueRandom.Services
+// 作用: 应用核心 YAML 配置文件持久化、协议版本演进与版本升级迁移驱动服务。
+//       采用规范用户目录 ~/.blue random/config.yaml 进行单点原子持久化，
+//       支持跨 C# 版本协议代号变更驱动迁移以及带中文注释的友好序列化。
+// ==============================================================================
+
 using System;
 using System.IO;
 using System.Text;
@@ -10,7 +18,8 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace BlueRandom.Services;
 
 /// <summary>
-/// YAML 配置读写与序列化服务
+/// YAML 配置读写与序列化服务。
+/// 提供零丢失持久化、跨 C# 版本协议变更迁移与数值边界清洗。
 /// </summary>
 public static class YamlConfigService
 {
@@ -24,144 +33,31 @@ public static class YamlConfigService
         .Build();
 
     /// <summary>
-    /// 获取数据与配置主目录路径
-    /// 默认采用用户根目录下的 .blue random 目录 (~/.blue random)，与系统深度融合且程序升级时永不丢失配置；
-    /// 仅在可执行文件同级已显式存在 configs 或 config 文件夹时作为便携模式加载，默认绝不在程序同级生成配置文件夹。
+    /// 获取数据与配置主目录物理路径。
+    /// 统一采用操作系统用户目录下的 .blue random 目录（%UserProfile%/.blue random），
+    /// 保证软件更新覆盖时配置与班级数据永不丢失。
     /// </summary>
+    /// <returns>用户数据主目录绝对路径。</returns>
     public static string GetUserDataDir()
     {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string localConfigs = Path.Combine(baseDir, "configs");
-        string localConfig = Path.Combine(baseDir, "config");
-
-        string dir;
-        if (Directory.Exists(localConfigs))
-        {
-            dir = localConfigs;
-        }
-        else if (Directory.Exists(localConfig))
-        {
-            dir = localConfig;
-        }
-        else
-        {
-            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            dir = Path.Combine(userProfile, ".blue random");
-        }
-
+        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string dir = Path.Combine(userProfile, ".blue random");
         Directory.CreateDirectory(dir);
-
-        // 平滑无损自愈迁移：若 ~/.blue random 尚无主配置，且历史目录 LocalAppData\BlueRandom 存在配置，则自动迁移
-        try
-        {
-            string cfgYaml = Path.Combine(dir, "config.yaml");
-            string cfgYml = Path.Combine(dir, "config.yml");
-            if (!File.Exists(cfgYaml) && !File.Exists(cfgYml))
-            {
-                string oldDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BlueRandom");
-                if (Directory.Exists(oldDir))
-                {
-                    string oldYaml = Path.Combine(oldDir, "config.yaml");
-                    string oldYml = Path.Combine(oldDir, "config.yml");
-                    if (File.Exists(oldYaml)) File.Copy(oldYaml, cfgYaml, true);
-                    else if (File.Exists(oldYml)) File.Copy(oldYml, cfgYml, true);
-
-                    // 迁移 classes 目录
-                    string oldClasses = Path.Combine(oldDir, "classes");
-                    string newClasses = Path.Combine(dir, "classes");
-                    if (Directory.Exists(oldClasses) && !Directory.Exists(newClasses))
-                    {
-                        CopyDirectory(oldClasses, newClasses);
-                    }
-
-                    // 迁移 customs 目录
-                    string oldCustoms = Path.Combine(oldDir, "customs");
-                    string newCustoms = Path.Combine(dir, "customs");
-                    if (Directory.Exists(oldCustoms) && !Directory.Exists(newCustoms))
-                    {
-                        CopyDirectory(oldCustoms, newCustoms);
-                    }
-
-                    // 迁移 .SHA256
-                    string oldSha = Path.Combine(oldDir, ".SHA256");
-                    string newSha = Path.Combine(dir, ".SHA256");
-                    if (File.Exists(oldSha) && !File.Exists(newSha))
-                    {
-                        File.Copy(oldSha, newSha, true);
-                    }
-
-                    AppLogger.Info("ConfigService", "已自动从 LocalAppData 迁移历史配置与数据到 ~/.blue random 目录");
-                }
-            }
-        }
-        catch
-        {
-            // 忽略迁移异常
-        }
-
         return dir;
     }
 
-    private static void CopyDirectory(string sourceDir, string destinationDir)
-    {
-        var dir = new DirectoryInfo(sourceDir);
-        if (!dir.Exists) return;
-
-        Directory.CreateDirectory(destinationDir);
-
-        foreach (var file in dir.GetFiles())
-        {
-            string targetFilePath = Path.Combine(destinationDir, file.Name);
-            file.CopyTo(targetFilePath, true);
-        }
-
-        foreach (var subDir in dir.GetDirectories())
-        {
-            string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-            CopyDirectory(subDir.FullName, newDestinationDir);
-        }
-    }
-
     /// <summary>
-    /// 获取主配置文件路径 (自动归一化合并 config.yml 与 config.yaml，消除双文件时间戳竞态引发的读取旧配置问题)
+    /// 获取主配置文件路径（config.yaml）。
     /// </summary>
+    /// <returns>规范化后的 config.yaml 绝对路径。</returns>
     public static string GetConfigFilePath()
     {
-        string dir = GetUserDataDir();
-        string yaml = Path.Combine(dir, "config.yaml");
-        string yml = Path.Combine(dir, "config.yml");
-
-        try
-        {
-            if (File.Exists(yml))
-            {
-                if (!File.Exists(yaml))
-                {
-                    File.Move(yml, yaml, true);
-                    AppLogger.Info("ConfigService", "已自动归一化旧版 config.yml -> config.yaml");
-                }
-                else
-                {
-                    // 若两者同时存在，保留修改时间较新者，并彻底删除过期的旧文件
-                    if (File.GetLastWriteTimeUtc(yml) > File.GetLastWriteTimeUtc(yaml))
-                    {
-                        File.Copy(yml, yaml, true);
-                    }
-                    File.Delete(yml);
-                    AppLogger.Info("ConfigService", "已消除 config.yml 与 config.yaml 双文件冲突");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Warn("ConfigService", $"归一化配置文件提示: {ex.Message}");
-        }
-
-        return yaml;
+        return Path.Combine(GetUserDataDir(), "config.yaml");
     }
 
     /// <summary>
-    /// 确保配置文件存在（如果不存在则写入带注释的默认配置模板）
+    /// 确保配置文件存在。
+    /// 若磁盘尚无配置文件，则以当前发布代号写入包含丰富中文注释的默认配置模板。
     /// </summary>
     public static void EnsureConfigFileExists()
     {
@@ -174,8 +70,11 @@ public static class YamlConfigService
     }
 
     /// <summary>
-    /// 从原始 YAML 文本中窥探 protocolVersion 字段值
+    /// 高性能前置探测：直接通过单行正则从原始 YAML 字符串中窥探 protocolVersion 协议代号。
+    /// 避免在仅需判定版本协议时全量解析反序列化整个对象树。
     /// </summary>
+    /// <param name="rawYaml">YAML 原始字符串。</param>
+    /// <returns>检测到的协议代号字符串（如 "Shiroko"）；未声明时返回 null。</returns>
     public static string? PeekProtocolVersion(string rawYaml)
     {
         if (string.IsNullOrWhiteSpace(rawYaml)) return null;
@@ -188,8 +87,10 @@ public static class YamlConfigService
     }
 
     /// <summary>
-    /// 判断当前配置文件是否需要执行协议变更兼容迁移（协议代号不同或未包含协议字段时返回 true）
+    /// 判断当前磁盘配置文件是否需要执行协议变更兼容迁移。
+    /// 当文件中的协议代号与当前客户端程序集定义的 AppVersion.Codename 不一致时返回 true。
     /// </summary>
+    /// <returns>需要迁移返回 true，否则返回 false。</returns>
     public static bool IsProtocolMigrationNeeded()
     {
         string path = GetConfigFilePath();
@@ -208,9 +109,15 @@ public static class YamlConfigService
 
     /// <summary>
     /// 读取并解析配置文件。
-    /// 核心设计：仅当检测到配置协议版本不同时，才自动进入协议变更处理（触发兼容性迁移并落盘保存）；
-    /// 协议版本一致时直接原生反序列化，绝不触发兼容程序，保证高性能与配置纯净。
+    /// <para>
+    /// 架构设计原则（协议代号驱动）：
+    /// 1. 协议版本一致时：直接原生反序列化并返回，绝不执行额外兼容代码，确保毫秒级纯净冷启动；
+    /// 2. 协议版本不一致时（跨版本升级）：自动激活 MigrateLegacyConfig 容错管道，
+    ///    兼容下划线键名、纠正旧版浮点音量并补齐新字段，完成后自动更新 protocolVersion 并持久化落盘。
+    /// </para>
     /// </summary>
+    /// <param name="autoMigrate">若检测到协议变更是否自动落盘保存更新后的配置。</param>
+    /// <returns>已清洗边界的 RootConfig 实体对象。</returns>
     public static RootConfig LoadConfig(bool autoMigrate = true)
     {
         string path = GetConfigFilePath();
@@ -257,87 +164,30 @@ public static class YamlConfigService
     }
 
     /// <summary>
-    /// 协议变更兼容处理程序：仅在检测到协议版本不同时调用。
-    /// 自动匹配已有条目并迁移配置，缺失的属性按模型定义补全默认值。
+    /// 跨版本协议变更配置兼容迁移管道。
+    /// 用于在 C# 版本升级时平滑读取已有配置，自动补齐新增字段默认值并执行数值边界归一化。
     /// </summary>
+    /// <param name="rawYaml">已有配置 YAML 文本。</param>
+    /// <returns>升级并归一化后的 RootConfig 实例。</returns>
     internal static RootConfig MigrateLegacyConfig(string rawYaml)
     {
-        // 1. 容错转换下划线 (snake_case) 或中划线 (kebab-case) 命名为标准 camelCase
-        string normalizedYaml = NormalizeYamlKeys(rawYaml);
-
-        // 2. 兼容历史遗留的旧版音量格式（例如 0.0-1.0 浮点转换为 0-100 整数）
-        if (normalizedYaml.Contains("gachaSoundVolume:") && !normalizedYaml.Contains("soundVolume:"))
-        {
-            normalizedYaml = System.Text.RegularExpressions.Regex.Replace(
-                normalizedYaml,
-                @"(?m)^(\s*)gachaSoundVolume:\s*([0-9.]+)",
-                match =>
-                {
-                    string indent = match.Groups[1].Value;
-                    if (double.TryParse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture, out double vol))
-                    {
-                        int intVol = (int)Math.Round(vol <= 1.0 ? vol * 100 : vol);
-                        return $"{indent}soundVolume: {intVol}";
-                    }
-                    return match.Value;
-                }
-            );
-        }
-
-        // 3. 反序列化：自动匹配已有条目，多余字段自动忽略
         RootConfig? config = null;
         try
         {
-            config = _deserializer.Deserialize<RootConfig>(normalizedYaml);
+            config = _deserializer.Deserialize<RootConfig>(rawYaml);
         }
         catch (Exception ex)
         {
-            AppLogger.Warn("ConfigService", $"旧配置反序列化容错: {ex.Message}，将保留有效条目并以默认配置补全");
+            AppLogger.Warn("ConfigService", $"配置反序列化容错: {ex.Message}，将保留有效条目并以默认配置补全");
         }
 
-        // 4. 补齐缺失属性的默认值并完成数值边界归一化
         return Normalize(config);
     }
 
     /// <summary>
-    /// 容错转换 YAML 键：将旧版本下划线 (snake_case) 或中划线 (kebab-case) 命名转换为标准 camelCase
+    /// 将配置对象清洗、格式化带注释后原子持久化写入主配置文件。
     /// </summary>
-    private static string NormalizeYamlKeys(string rawYaml)
-    {
-        if (string.IsNullOrWhiteSpace(rawYaml)) return rawYaml;
-
-        return System.Text.RegularExpressions.Regex.Replace(
-            rawYaml,
-            @"(?m)^(\s*)([a-z0-9]+(?:[_-][a-z0-9]+)+):",
-            match =>
-            {
-                string indent = match.Groups[1].Value;
-                string key = match.Groups[2].Value;
-                string camelKey = ToCamelCase(key);
-                return $"{indent}{camelKey}:";
-            }
-        );
-    }
-
-    private static string ToCamelCase(string str)
-    {
-        string[] parts = str.Split('_', '-');
-        if (parts.Length <= 1) return str;
-        var sb = new StringBuilder(parts[0].ToLowerInvariant());
-        for (int i = 1; i < parts.Length; i++)
-        {
-            if (parts[i].Length > 0)
-            {
-                sb.Append(char.ToUpperInvariant(parts[i][0]));
-                if (parts[i].Length > 1) sb.Append(parts[i].Substring(1).ToLowerInvariant());
-            }
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// 保存配置到磁盘
-    /// </summary>
+    /// <param name="config">待保存的配置对象。</param>
     public static void SaveConfig(RootConfig config)
     {
         string path = GetConfigFilePath();
@@ -355,8 +205,9 @@ public static class YamlConfigService
     }
 
     /// <summary>
-    /// 写入默认配置内容
+    /// 向指定路径写入出厂预设的完整默认配置模板。
     /// </summary>
+    /// <param name="path">目标文件路径。</param>
     public static void WriteDefaultConfig(string path)
     {
         var defaultConfig = new RootConfig
@@ -375,8 +226,11 @@ public static class YamlConfigService
     }
 
     /// <summary>
-    /// 配置清洗与归一化
+    /// 对配置实例的各字段进行合法性清洗与数值边界裁剪（Clamping）。
+    /// 防止由于手误或损坏文件导致缩放比例异常、音量超界或透明度非法。
     /// </summary>
+    /// <param name="input">待清洗的原始配置实例。</param>
+    /// <returns>清洗归一化后的 RootConfig 实例。</returns>
     public static RootConfig Normalize(RootConfig? input)
     {
         var cfg = input ?? new RootConfig();
@@ -403,8 +257,11 @@ public static class YamlConfigService
     }
 
     /// <summary>
-    /// 序列化为带中文注释的 YAML
+    /// 将配置对象序列化为包含清晰分段与详细中文注释的标准 YAML 文本。
+    /// 方便用户直接通过外部文本编辑器（记事本、VS Code 等）阅读和调整。
     /// </summary>
+    /// <param name="cfg">归一化后的配置对象。</param>
+    /// <returns>格式美观的 YAML 字符串。</returns>
     public static string ToYamlWithComments(RootConfig cfg)
     {
         var sb = new StringBuilder();
@@ -429,7 +286,7 @@ public static class YamlConfigService
             foreach (var s in cfg.StudentList)
             {
                 sb.AppendLine($"  - name: \"{s.Name}\"");
-                sb.AppendLine($"    weight: {s.Weight:F1}");
+                sb.AppendLine($"    weight: {s.Weight.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}");
                 sb.AppendLine($"    letterColor: {s.LetterColor}");
             }
         }
@@ -442,8 +299,8 @@ public static class YamlConfigService
         sb.AppendLine($"  alwaysOnTop: {(cfg.FloatingButton.AlwaysOnTop ? "true" : "false")}");
         sb.AppendLine($"  showInTaskbar: {(cfg.FloatingButton.ShowInTaskbar ? "true" : "false")}");
         sb.AppendLine("  position:");
-        sb.AppendLine($"    x: {(cfg.FloatingButton.Position.X.HasValue ? cfg.FloatingButton.Position.X.Value.ToString() : "null")}");
-        sb.AppendLine($"    y: {(cfg.FloatingButton.Position.Y.HasValue ? cfg.FloatingButton.Position.Y.Value.ToString() : "null")}");
+        sb.AppendLine($"    x: {(cfg.FloatingButton.Position.X.HasValue ? cfg.FloatingButton.Position.X.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null")}");
+        sb.AppendLine($"    y: {(cfg.FloatingButton.Position.Y.HasValue ? cfg.FloatingButton.Position.Y.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null")}");
         sb.AppendLine($"  customIconId: '{cfg.FloatingButton.CustomIconId}'");
         sb.AppendLine($"  iconSize: {cfg.FloatingButton.IconSize}");
         sb.AppendLine($"  borderColor: '{cfg.FloatingButton.BorderColor}'");
@@ -464,7 +321,7 @@ public static class YamlConfigService
         sb.AppendLine($"  musicVolume: {cfg.PickResultDialog.MusicVolume}");
         sb.AppendLine($"  bgmStartTime: {cfg.PickResultDialog.BgmStartTime}");
         sb.AppendLine($"  bgmFadeDuration: {cfg.PickResultDialog.BgmFadeDuration}");
-        sb.AppendLine($"  panelOpacity: {cfg.PickResultDialog.PanelOpacity:F2}");
+        sb.AppendLine($"  panelOpacity: {cfg.PickResultDialog.PanelOpacity.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}");
         sb.AppendLine($"  panelBgColor: '{cfg.PickResultDialog.PanelBgColor}'");
         sb.AppendLine($"  panelBorderColor: '{cfg.PickResultDialog.PanelBorderColor}'");
         sb.AppendLine($"  showDeco: {(cfg.PickResultDialog.ShowDeco ? "true" : "false")}");

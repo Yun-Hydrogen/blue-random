@@ -1,3 +1,23 @@
+// ============================================================================
+//  File: FloatingButtonWindow.xaml.cs
+//  Project: BlueRandom (WPF Native)
+//  Description:
+//    桌面常驻全局交互核心——透明悬浮球窗体 (FCB: Floating Control Button)。
+//
+//  Architecture & Implementation Highlights:
+//    1. 动态几何排版体系：
+//       - 采用 240x240 逻辑透明画布，以圆心 (120, 120) 为基准原点，承载 50px 基础核心按钮；
+//       - 围绕圆心构建 -150° 至 -30° 的 120° 顺滑圆头胶囊弧形选择器（ArcCapsuleGeometry）；
+//       - 确认/取消操作按钮动态映射于弧形两侧端点正下方，确保视觉层次与操作重心的平衡；
+//    2. 屏幕吸附与边缘裁剪 (Edge Clamping)：
+//       - 采用 padding 补偿边界算法，允许透明扩展区越出屏幕边界，让视觉核心按钮能 100% 紧贴工作区边缘；
+//    3. 微交互与硬件加速动效：
+//       - 具有 0.22s 进场三次贝塞尔平滑膨胀与 0.18s 径向快速聚拢退场动画；
+//       - 支持内存 DirectSound 点击音效回放与按钮脉冲缩放；
+//    4. 跨进程与置顶保活：
+//       - 内置每秒 DispatcherTimer 定时器，调用 Win32 SetWindowPos(HWND_TOPMOST) 抵御全屏抢占。
+// ============================================================================
+
 using System;
 using System.IO;
 using System.Media;
@@ -17,6 +37,9 @@ using BlueRandom.Services;
 
 namespace BlueRandom.UI.FCB;
 
+/// <summary>
+/// 桌面常驻全局透明悬浮按钮窗体。
+/// </summary>
 public partial class FloatingButtonWindow : Window
 {
     private Point _mouseDownScreenPos;
@@ -26,6 +49,9 @@ public partial class FloatingButtonWindow : Window
     private int _pickCount = 1;
     private SoundPlayer? _clickSoundPlayer;
 
+    /// <summary>
+    /// 初始化悬浮窗体实例，挂载事件监听并预加载音频与图标资源。
+    /// </summary>
     public FloatingButtonWindow()
     {
         InitializeComponent();
@@ -59,6 +85,9 @@ public partial class FloatingButtonWindow : Window
         Loaded += OnLoaded;
     }
 
+    /// <summary>
+    /// 从全内存资源缓存中初始化按键音效播放器。
+    /// </summary>
     private void InitAudio()
     {
         byte[]? soundBytes = ResourceCache.GetAudioBytes("button_click.wav");
@@ -77,6 +106,9 @@ public partial class FloatingButtonWindow : Window
         }
     }
 
+    /// <summary>
+    /// 窗体完成呈现后的初次布局同步与 Win32 置顶看门狗定时器启动。
+    /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyProps(ConfigCache.GetFCBProps());
@@ -98,6 +130,9 @@ public partial class FloatingButtonWindow : Window
         topTimer.Start();
     }
 
+    /// <summary>
+    /// 触发按键交互短音效回放。
+    /// </summary>
     private void PlayClickSound()
     {
         try
@@ -111,8 +146,9 @@ public partial class FloatingButtonWindow : Window
     }
 
     /// <summary>
-    /// 依据基准尺寸动态计算所有环绕控件的中心坐标 (1:1 复刻 Floating.vue pickerMetrics 并升级 180° 圆弧)
+    /// 依据基准尺寸动态计算所有环绕控件的中心坐标 (1:1 复刻 Floating.vue pickerMetrics 并升级 180° 圆弧)。
     /// </summary>
+    /// <param name="baseSize">中心主按钮基础直径尺寸（px）。</param>
     private void UpdateGeometry(double baseSize)
     {
         double centerX = Width / 2.0;  // 120
@@ -148,6 +184,12 @@ public partial class FloatingButtonWindow : Window
         UpdateArcPickerLayout(centerX, centerY, baseSize);
     }
 
+    /// <summary>
+    /// 动态生成并布局 -150° 至 -30° 的 120 度圆弧胶囊条、径向刻度分割线以及加减操作按钮。
+    /// </summary>
+    /// <param name="cx">主圆心 X 坐标。</param>
+    /// <param name="cy">主圆心 Y 坐标。</param>
+    /// <param name="baseSize">中心主按钮基础尺寸。</param>
     private void UpdateArcPickerLayout(double cx, double cy, double baseSize)
     {
         double scale = baseSize / 50.0;
@@ -174,6 +216,16 @@ public partial class FloatingButtonWindow : Window
         PositionOnArc(BtnMax, cx, cy, rMid, -40.0, 0.0);
     }
 
+    /// <summary>
+    /// 数学构建两端具备圆滑外凸半圆封头的环状弧形胶囊 PathGeometry 矢量图形。
+    /// </summary>
+    /// <param name="cx">圆心 X。</param>
+    /// <param name="cy">圆心 Y。</param>
+    /// <param name="rMid">弧线中心轨迹半径。</param>
+    /// <param name="thickness">胶囊厚度（径向环宽）。</param>
+    /// <param name="startDeg">起始角度（度）。</param>
+    /// <param name="endDeg">终止角度（度）。</param>
+    /// <returns>构建完成且冻结 (Freeze) 的 WPF PathGeometry 实例。</returns>
     private static PathGeometry CreateArcCapsuleGeometry(double cx, double cy, double rMid, double thickness, double startDeg, double endDeg)
     {
         double hT = thickness / 2.0;
@@ -210,6 +262,9 @@ public partial class FloatingButtonWindow : Window
         return geom;
     }
 
+    /// <summary>
+    /// 计算并设置沿圆心径向法线方向的分割线段端点坐标。
+    /// </summary>
     private static void SetRadialDivider(Line line, double cx, double cy, double rMid, double deg, double halfLen)
     {
         double rad = deg * Math.PI / 180.0;
@@ -219,6 +274,9 @@ public partial class FloatingButtonWindow : Window
         line.Y2 = cy + (rMid + halfLen) * Math.Sin(rad);
     }
 
+    /// <summary>
+    /// 依极坐标将指定的 UI 元素中心定位到圆弧轨迹特定角度上，支持可选切向倾角变换。
+    /// </summary>
     private static void PositionOnArc(FrameworkElement elem, double cx, double cy, double rMid, double deg, double tiltFactor = 0.0)
     {
         double rad = deg * Math.PI / 180.0;
@@ -240,6 +298,9 @@ public partial class FloatingButtonWindow : Window
         }
     }
 
+    /// <summary>
+    /// 定位人数展示徽章并将其旋转角度归零锁定为水平正向。
+    /// </summary>
     private static void PositionCountBorder(FrameworkElement elem, RotateTransform rotate, double cx, double cy, double rMid, double deg, double tiltFactor = 0.0)
     {
         double rad = deg * Math.PI / 180.0;
@@ -253,8 +314,9 @@ public partial class FloatingButtonWindow : Window
     }
 
     /// <summary>
-    /// 热更新按钮外观配置
+    /// 热更新按钮外观配置，动态重新排版尺寸、透明度、置顶状态、边框颜色及自定义图标。
     /// </summary>
+    /// <param name="props">悬浮按钮配置数据对象。</param>
     public void ApplyProps(FloatingButtonConfig props)
     {
         Dispatcher.Invoke(() =>
@@ -355,6 +417,9 @@ public partial class FloatingButtonWindow : Window
     //  拖拽与点击交互
     // ========================================================================
 
+    /// <summary>
+    /// 鼠标左键按下事件：记录屏幕绝对坐标起点，准备拖拽或点击判定。
+    /// </summary>
     private void OnMainButtonMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
@@ -372,6 +437,9 @@ public partial class FloatingButtonWindow : Window
         }
     }
 
+    /// <summary>
+    /// 鼠标移动事件：超过 4 像素移动阈值时自动触发 Win32 原生平滑拖拽并广播位移。
+    /// </summary>
     private void OnMainButtonMouseMove(object sender, MouseEventArgs e)
     {
         if (_isPressed && e.LeftButton == MouseButtonState.Pressed)
@@ -412,6 +480,9 @@ public partial class FloatingButtonWindow : Window
         }
     }
 
+    /// <summary>
+    /// 鼠标左键抬起事件：若未发生移动，则判定为单击交互并切换选择器展开状态。
+    /// </summary>
     private void OnMainButtonMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
@@ -428,7 +499,7 @@ public partial class FloatingButtonWindow : Window
     }
 
     /// <summary>
-    /// 允许透明扩展区越出屏幕边界，让视觉核心的圆形按钮 100% 紧贴屏幕边缘 (复刻 clampBoundsToWorkArea)
+    /// 允许透明扩展区越出屏幕边界，让视觉核心的圆形按钮 100% 紧贴屏幕边缘 (复刻 clampBoundsToWorkArea)。
     /// </summary>
     private void ClampPosition()
     {
@@ -449,6 +520,10 @@ public partial class FloatingButtonWindow : Window
     //  人数选择器控制
     // ========================================================================
 
+    /// <summary>
+    /// 展开或收缩人数选择胶囊，驱动 CubicEase 贝塞尔弹性动效与渐变。
+    /// </summary>
+    /// <param name="open">true 为展开，false 为收拢。</param>
     private void TogglePicker(bool open)
     {
         _isPickerOpen = open;
@@ -529,6 +604,10 @@ public partial class FloatingButtonWindow : Window
         }
     }
 
+    /// <summary>
+    /// 设置并校验抽取人数，控制加减极值按钮启用状态并触发脉冲弹跳动效。
+    /// </summary>
+    /// <param name="count">目标抽取人数 (1-10)。</param>
     private void SetPickCount(int count)
     {
         _pickCount = Math.Clamp(count, 1, 10);
@@ -548,17 +627,38 @@ public partial class FloatingButtonWindow : Window
         }
     }
 
+    /// <summary>
+    /// 快捷设置抽取人数为下限 1 人。
+    /// </summary>
     private void OnMinClick(object sender, RoutedEventArgs e) => SetPickCount(1);
+
+    /// <summary>
+    /// 抽取人数步进减 1。
+    /// </summary>
     private void OnMinusClick(object sender, RoutedEventArgs e) => SetPickCount(_pickCount - 1);
+
+    /// <summary>
+    /// 抽取人数步进加 1。
+    /// </summary>
     private void OnPlusClick(object sender, RoutedEventArgs e) => SetPickCount(_pickCount + 1);
+
+    /// <summary>
+    /// 快捷设置抽取人数为上限 10 人。
+    /// </summary>
     private void OnMaxClick(object sender, RoutedEventArgs e) => SetPickCount(10);
 
+    /// <summary>
+    /// 点击取消按钮：关闭选择器。
+    /// </summary>
     private void OnCancelPickerClick(object sender, RoutedEventArgs e)
     {
         PlayClickSound();
         TogglePicker(false);
     }
 
+    /// <summary>
+    /// 点击确认按钮：收拢选择器并向后端广播 RandomTriggered 抽取触发事件。
+    /// </summary>
     private void OnConfirmPickerClick(object sender, RoutedEventArgs e)
     {
         PlayClickSound();
@@ -571,6 +671,10 @@ public partial class FloatingButtonWindow : Window
     //  IPC 指令监听
     // ========================================================================
 
+    /// <summary>
+    /// 处理面向悬浮球模块的 IPC 消息分发（HideWindow, ShowWindow, ApplyNewProp, MoveNewPosition, Destroy）。
+    /// </summary>
+    /// <param name="msg">IPC 消息包。</param>
     private void OnIpcMessageReceived(IpcMessage msg)
     {
         Dispatcher.Invoke(() =>
