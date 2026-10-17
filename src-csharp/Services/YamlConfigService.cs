@@ -32,6 +32,17 @@ public static class YamlConfigService
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .Build();
 
+    private static string? _overrideUserDataDir = null;
+
+    /// <summary>
+    /// 测试环境隔离重定向目录。仅限单元测试或沙箱环境调用，防止污染用户真实生产配置。
+    /// </summary>
+    public static string? OverrideUserDataDir
+    {
+        get => _overrideUserDataDir;
+        set => _overrideUserDataDir = value;
+    }
+
     /// <summary>
     /// 获取数据与配置主目录物理路径。
     /// 统一采用操作系统用户目录下的 .blue random 目录（%UserProfile%/.blue random），
@@ -40,6 +51,19 @@ public static class YamlConfigService
     /// <returns>用户数据主目录绝对路径。</returns>
     public static string GetUserDataDir()
     {
+        if (!string.IsNullOrEmpty(_overrideUserDataDir))
+        {
+            Directory.CreateDirectory(_overrideUserDataDir);
+            return _overrideUserDataDir;
+        }
+
+        string? envDir = Environment.GetEnvironmentVariable("BLUERANDOM_USER_DATA_DIR");
+        if (!string.IsNullOrEmpty(envDir))
+        {
+            Directory.CreateDirectory(envDir);
+            return envDir;
+        }
+
         string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string dir = Path.Combine(userProfile, ".blue random");
         Directory.CreateDirectory(dir);

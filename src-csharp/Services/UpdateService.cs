@@ -270,12 +270,13 @@ public static class UpdateService
         else if (cmp == 0)
         {
             // 本地与云端相同
+            string changelog = !string.IsNullOrWhiteSpace(body) ? body.Trim() : AppVersion.GetChangelog();
             return new UpdateCheckResult
             {
                 Ok = true,
                 Status = "ok",
                 Title = $"已是最新版本：v{localVersion}",
-                Detail = $"当前版本（{localCodename} v{localVersion}）已是最新公开发布版本，无需更新。",
+                Detail = !string.IsNullOrWhiteSpace(changelog) ? changelog : $"当前版本（{localCodename} v{localVersion}）已是最新公开发布版本，无需更新。",
                 ReleaseUrl = releaseUrl,
                 LocalVersion = localVersion,
                 RemoteVersion = remoteVersion,
@@ -285,12 +286,13 @@ public static class UpdateService
         else
         {
             // 本地版本高于云端公开发布（开发预览版）
+            string changelog = !string.IsNullOrWhiteSpace(body) ? body.Trim() : AppVersion.GetChangelog();
             return new UpdateCheckResult
             {
                 Ok = true,
                 Status = "warn",
                 Title = $"当前为开发预览版本：v{localVersion}",
-                Detail = $"云端最新公开发布版本为 {remoteTag}，您当前运行的是抢先版本或内部测试构建。",
+                Detail = !string.IsNullOrWhiteSpace(changelog) ? changelog : $"云端最新公开发布版本为 {remoteTag}，您当前运行的是抢先版本或内部测试构建。",
                 ReleaseUrl = releaseUrl,
                 LocalVersion = localVersion,
                 RemoteVersion = remoteVersion,

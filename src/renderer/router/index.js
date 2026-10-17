@@ -7,10 +7,12 @@
 */
 import { createRouter, createWebHashHistory } from 'vue-router'
 import ConfigPanel from '../views/ConfigPanel.vue'
+import PickResult from '../views/PickResult.vue'
 
 const routes = [
   { path: '/', component: ConfigPanel },
-  { path: '/config-panel', component: ConfigPanel }
+  { path: '/config-panel', component: ConfigPanel },
+  { path: '/pick-result', component: PickResult }
 ]
 
 const router = createRouter({

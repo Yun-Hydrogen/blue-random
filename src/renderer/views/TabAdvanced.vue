@@ -218,7 +218,15 @@
         />
       </div>
       <div v-if="updateStatus" class="cfg-hint" :class="updateStatus">{{ updateTitle }}</div>
-      <div v-if="updateDetail" class="update-detail-text">{{ updateDetail }}</div>
+      <!-- 使用 rizui-md 简约只读模式读取 changelog.md -->
+      <div v-if="updateDetail" class="update-detail-md">
+        <rizui_md
+          :model-value="updateDetail"
+          readonly
+          height="auto"
+          :color="tabTheme"
+        />
+      </div>
       <!-- 无论是否有更新，均提供 GitHub Releases 跳转入口 -->
       <rizui_button 
         primary
@@ -272,7 +280,10 @@
 //  onMounted — 组件挂载完成后的生命周期钩子
 // ============================================================
 import { ref, reactive, computed, onMounted } from 'vue'
-import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, openURL } from 'riz-ui'
+import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, rizui_mdeditor, openURL } from 'riz-ui'
+
+/* 将 rizui_mdeditor 别名为 rizui_md 以支持简约 Markdown 组件使用 */
+const rizui_md = rizui_mdeditor
 
 /* Tab 主题色 */
 const tabTheme = '#aa88dd'
@@ -663,6 +674,14 @@ async function confirmSecurity() {
   color: #888;
   white-space: pre-wrap;
   margin-top: 4px;
+}
+
+/* 更新日志 Markdown 简约只读渲染容器 */
+.update-detail-md {
+  margin-top: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 /* =================================================================

@@ -74,6 +74,7 @@ public class YamlConfigServiceTests
     [Fact]
     public void GetUserDataDir_ReturnsDotBlueRandomInUserProfile()
     {
+        YamlConfigService.OverrideUserDataDir = null;
         string expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".blue random");
         string actual = YamlConfigService.GetUserDataDir();
 

@@ -662,6 +662,112 @@ export function setupNativeBridgeAdapter() {
         detail: '无法连接到更新服务',
         releaseUrl: 'https://github.com/Yun-Hydrogen/blue-random/releases/latest'
       }
+    },
+
+    /**
+     * 读取本地 changelog.md 文本内容。
+     * @returns {Promise<string>} changelog 文本
+     */
+    getChangelog: async () => {
+      try {
+        const b = getBridge()
+        if (b && typeof b.GetChangelog === 'function') {
+          return await b.GetChangelog()
+        }
+      } catch (e) {
+        console.error('[Bridge] getChangelog 失败', e)
+      }
+    }
+  }
+
+  // 3. 结果浮窗 API 适配器 (面向透明 WebView2 浮窗，带消息队列缓冲)
+  let pendingOpenPayload = window.__pendingPickResult || null
+  let openListener = null
+  let resetListener = null
+
+  window.__onPickResultOpen = (payload) => {
+    if (typeof openListener === 'function') {
+      openListener(payload)
+    } else {
+      pendingOpenPayload = payload
+    }
+  }
+
+  window.__onPickResultReset = () => {
+    pendingOpenPayload = null
+    if (typeof resetListener === 'function') {
+      resetListener()
+    }
+  }
+
+  window.pickResultApi = {
+    getConfig: async () => {
+      try {
+        const b = getBridge()
+        if (b && typeof b.GetPickResultConfigJson === 'function') {
+          const json = await b.GetPickResultConfigJson()
+          return json ? JSON.parse(json) : null
+        }
+      } catch (e) {
+        console.error('[Bridge] pickResultApi.getConfig 失败', e)
+      }
+      return {
+        defaultPlayGachaSound: true,
+        soundVolume: 80,
+        playMusic: false,
+        musicVolume: 60,
+        panelOpacity: 0.92,
+        panelBgColor: '#ffffff',
+        panelBorderColor: '#66ccff',
+        showDeco: true
+      }
+    },
+    getResults: async () => {
+      try {
+        const b = getBridge()
+        if (b && typeof b.GetLastResultsJson === 'function') {
+          const json = await b.GetLastResultsJson()
+          return json ? JSON.parse(json) : []
+        }
+      } catch (e) {
+        console.error('[Bridge] pickResultApi.getResults 失败', e)
+      }
+      return []
+    },
+    onOpen: (callback) => {
+      openListener = callback
+      if (pendingOpenPayload) {
+        const p = pendingOpenPayload
+        pendingOpenPayload = null
+        try {
+          callback(p)
+        } catch (err) {
+          console.error('[Bridge] 处理暂存的 pickResultOpen 失败', err)
+        }
+      }
+      return () => {
+        if (openListener === callback) {
+          openListener = null
+        }
+      }
+    },
+    onReset: (callback) => {
+      resetListener = callback
+      return () => {
+        if (resetListener === callback) {
+          resetListener = null
+        }
+      }
+    },
+    close: () => {
+      try {
+        const b = getBridge()
+        if (b && typeof b.ClosePickResult === 'function') {
+          b.ClosePickResult()
+        }
+      } catch (e) {
+        console.error('[Bridge] pickResultApi.close 失败', e)
+      }
     }
   }
 

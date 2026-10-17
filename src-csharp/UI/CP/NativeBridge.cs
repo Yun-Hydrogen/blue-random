@@ -385,6 +385,15 @@ public class NativeBridge
     }
 
     /// <summary>
+    /// 读取本地 changelog.md 更新日志内容（优先内嵌资源，次选物理文件）。
+    /// </summary>
+    /// <returns>changelog.md 完整 Markdown 文本。</returns>
+    public string GetChangelog()
+    {
+        return AppVersion.GetChangelog();
+    }
+
+    /// <summary>
     /// 通过 schtasks 命令行服务创建或更新开机自启动计划任务。
     /// </summary>
     /// <param name="taskName">计划任务名称。</param>
@@ -594,5 +603,88 @@ public class NativeBridge
             AppLogger.Warn("WebUI", message);
         else
             AppLogger.Info("WebUI", message);
+    }
+
+    // ========================================================================
+    //  8. 抽卡结果浮窗 (PickResult) 专用互操作
+    // ========================================================================
+
+    /// <summary>
+    /// 获取当前抽卡结果浮窗的个性化配置（包含颜色、透明度、立绘开关与自定义音效/BGM 的 Data URL）。
+    /// </summary>
+    /// <returns>JSON 序列化后的配置对象。</returns>
+    public string GetPickResultConfigJson()
+    {
+        var props = ConfigCache.GetFRWProps();
+        string gachaSoundDataUrl = "";
+        if (!string.IsNullOrEmpty(props.GachaSoundCustomId))
+        {
+            var custom = CustomsStore.LoadCustom(props.GachaSoundCustomId);
+            if (custom != null && !string.IsNullOrEmpty(custom.Base64))
+            {
+                string mime = custom.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? "audio/wav" : "audio/mpeg";
+                gachaSoundDataUrl = $"data:{mime};base64,{custom.Base64}";
+            }
+        }
+        string bgmDataUrl = "";
+        if (props.PlayMusic && !string.IsNullOrEmpty(props.BgmCustomId))
+        {
+            var custom = CustomsStore.LoadCustom(props.BgmCustomId);
+            if (custom != null && !string.IsNullOrEmpty(custom.Base64))
+            {
+                string mime = custom.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? "audio/wav" : "audio/mpeg";
+                bgmDataUrl = $"data:{mime};base64,{custom.Base64}";
+            }
+        }
+
+        var dto = new
+        {
+            defaultPlayGachaSound = props.DefaultPlayGachaSound,
+            soundVolume = props.SoundVolume,
+            gachaSoundDataUrl = gachaSoundDataUrl,
+            playMusic = props.PlayMusic,
+            musicVolume = props.MusicVolume,
+            bgmStartTime = props.BgmStartTime,
+            bgmFadeDuration = props.BgmFadeDuration,
+            bgmDataUrl = bgmDataUrl,
+            panelOpacity = props.PanelOpacity,
+            panelBgColor = props.PanelBgColor,
+            panelBorderColor = props.PanelBorderColor,
+            showDeco = props.ShowDeco
+        };
+        return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
+    /// <summary>
+    /// 获取上一轮或当前缓存在浮窗宿主中的抽取学生名单。
+    /// </summary>
+    /// <returns>JSON 序列化学生列表。</returns>
+    public string GetLastResultsJson()
+    {
+        if (_hostWindow is BlueRandom.UI.FRW.ResultWindow frw)
+        {
+            var students = frw.CurrentStudents;
+            return JsonSerializer.Serialize(students, JsonOptions);
+        }
+        return "[]";
+    }
+
+    /// <summary>
+    /// 关闭抽卡结果浮窗，隐去窗口并上报 WindowClosed 事件。
+    /// </summary>
+    public void ClosePickResult()
+    {
+        _hostWindow.Dispatcher.Invoke(() =>
+        {
+            if (_hostWindow is BlueRandom.UI.FRW.ResultWindow frw)
+            {
+                frw.Dismiss();
+            }
+            else
+            {
+                _hostWindow.Hide();
+                IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Frw, "WindowClosed"));
+            }
+        });
     }
 }

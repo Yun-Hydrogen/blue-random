@@ -25,23 +25,27 @@ public static class WindowManager
 {
     private static Thread? _fcbThread;
     private static Thread? _frwThread;
-    private static Thread? _cpThread;
+    private static Thread? _webUiThread;
 
     /// <summary>
-    /// 并发拉起悬浮球、结果浮窗、配置面板三个独立 STA UI 线程，并启动系统托盘监听。
+    /// 并发拉起悬浮球 (FCB)、结果浮窗 (FRW) 与配置面板 (CP) 的独立 STA UI 线程，并启动系统托盘监听。
     /// <para>
-    /// 架构隔离优势：
-    /// 1. FCB 线程专职监听鼠标拖拽与 60FPS 呼吸/旋转动画，不受任何复杂渲染阻塞；
-    /// 2. FRW 线程专职驱动卡牌 3D 倾角翻转与 10 连抽序列帧动画；
-    /// 3. CP 线程专职承载 Chromium 内核的 WebView2 实例，并在 ApplicationIdle 优先级预加载虚拟域静态资源；
-    /// 4. 任意单一窗口卡顿或抛出未捕获异常均不会导致整个应用主进程崩溃。
+    /// 架构隔离与线程安全优势（2026-10-17 更新）：
+    /// 1. FCB 线程专职监听鼠标拖拽与 60FPS 呼吸/旋转动画，不受任何复杂渲染或 Chromium 引擎阻塞；
+    /// 2. FRW 线程独立承载结果浮窗的 WebView2（独立环境 + 独立 userDataFolder = 独立 Web 进程），
+    ///    与 CP 彻底隔离，避免配置面板的清缓存/DevTools/后台节流影响招募动画与音频；
+    /// 3. CP 线程承载配置面板的 WebView2（共享 EBWebView 目录）；
+    /// 4. 严格遵守 COM 单线程套间 (STA) 规则，每个 CoreWebView2Environment 只在其所属线程调度，
+    ///    根除 0x80010106 / InvalidOperationException 与 userDataFolder 互斥锁冲突；
+    /// 5. CP 启动时不预热（首次打开时初始化）；FRW 仅通过 EnsureHandle 建立 Win32 HWND，
+    ///    绝不调用 Show()，杜绝界面闪烁。
     /// </para>
     /// </summary>
     public static void InitializeAllThreads()
     {
         AppLogger.Info("WinMgr", "正在拉起各模块独立 UI 线程...");
 
-        // 1. 悬浮按钮 (FCB) 独立线程
+        // 1. 悬浮按钮 (FCB) 独立线程 (纯原生 WPF 高刷新率)
         _fcbThread = new Thread(() =>
         {
             try
@@ -62,13 +66,12 @@ public static class WindowManager
         _fcbThread.SetApartmentState(ApartmentState.STA);
         _fcbThread.Start();
 
-        // 2. 结果浮窗 (FRW) 独立线程
+        // 2. 结果浮窗 (FRW) 独立线程：纯 WPF 原生透明窗口（无 WebView2，UIAccess 兼容）
         _frwThread = new Thread(() =>
         {
             try
             {
                 var frwWin = new ResultWindow();
-                // 启动时隐藏，等待 ShowWindow 唤醒
                 Dispatcher.Run();
             }
             catch (Exception ex)
@@ -83,23 +86,12 @@ public static class WindowManager
         _frwThread.SetApartmentState(ApartmentState.STA);
         _frwThread.Start();
 
-        // 3. 配置面板 (CP) 独立线程
-        _cpThread = new Thread(() =>
+        // 3. 配置面板 (CP) 独立线程（首次打开时初始化 WebView2，不做启动预热）
+        _webUiThread = new Thread(() =>
         {
             try
             {
                 var cpWin = new ConfigPanelWindow();
-                // 在消息泵启动后低优先级预热 WebView2
-                Dispatcher.CurrentDispatcher.BeginInvoke(new Action(async () =>
-                {
-                    try
-                    {
-                        await cpWin.EnsureReadyAsync();
-                    }
-                    catch { }
-                }), DispatcherPriority.ApplicationIdle);
-
-                // 启动消息循环
                 Dispatcher.Run();
             }
             catch (Exception ex)
@@ -108,11 +100,11 @@ public static class WindowManager
             }
         })
         {
-            Name = "CP_UI_Thread",
+            Name = "WebUI_Thread",
             IsBackground = true
         };
-        _cpThread.SetApartmentState(ApartmentState.STA);
-        _cpThread.Start();
+        _webUiThread.SetApartmentState(ApartmentState.STA);
+        _webUiThread.Start();
 
         // 4. 初始化系统托盘图标
         TrayService.Initialize();

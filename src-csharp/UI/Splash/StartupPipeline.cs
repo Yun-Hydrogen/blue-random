@@ -130,6 +130,12 @@ public static class StartupPipeline
             AppLogger.Info("Pipeline", $"配置已成功注入 ConfigCache (协议代号: {config.ProtocolVersion})，候选学生数: {config.StudentList.Count}");
             ClassManagerService.EnsureInitialized(ConfigCache.Current);
             AppLogger.Info("Pipeline", $"配置与班级数据已成功装载，候选学生数: {ConfigCache.Current.StudentList.Count}，当前班级: {ConfigCache.Current.ActiveClassId}");
+
+            // 检查相同用途自定义资源，默认只保留最新一个并装载
+            splash.UpdateProgress(50, "正在检查并整理多媒体自定义资源...");
+            await Task.Delay(100);
+            CustomsStore.ConsolidateAndBindLatestResources(ConfigCache.Current);
+
             splash.UpdateProgress(55, "配置文件初始化完成！");
         }
         catch (Exception ex)

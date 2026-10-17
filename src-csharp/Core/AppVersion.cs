@@ -104,4 +104,49 @@ public static class AppVersion
             Codename = code.Trim();
         }
     }
+
+    /// <summary>
+    /// 读取本地 changelog.md 文本（支持内嵌清单资源及磁盘逐级回溯探测）。
+    /// </summary>
+    /// <returns>changelog.md 文本内容；若未找到则返回空字符串。</returns>
+    public static string GetChangelog()
+    {
+        try
+        {
+            // 1. 优先尝试从程序集内嵌资源读取 changelog.md (发布单文件模式)
+            var asm = typeof(AppVersion).Assembly;
+            using var stream = asm.GetManifestResourceStream("changelog.md")
+                            ?? asm.GetManifestResourceStream("BlueRandom.changelog.md");
+            if (stream != null)
+            {
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+
+            // 2. 本地开发调试时，向上回溯探测磁盘上的 changelog.md
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string[] possiblePaths =
+            [
+                Path.Combine(baseDir, "changelog.md"),
+                Path.Combine(baseDir, "..", "changelog.md"),
+                Path.Combine(baseDir, "..", "..", "changelog.md"),
+                Path.Combine(baseDir, "..", "..", "..", "changelog.md"),
+                Path.Combine(baseDir, "..", "..", "..", "..", "changelog.md")
+            ];
+
+            foreach (var path in possiblePaths)
+            {
+                if (File.Exists(path))
+                {
+                    return File.ReadAllText(path, System.Text.Encoding.UTF8);
+                }
+            }
+        }
+        catch
+        {
+            // 忽略异常
+        }
+
+        return string.Empty;
+    }
 }

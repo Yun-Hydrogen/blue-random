@@ -14,6 +14,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
 using BlueRandom.Core.Ipc;
 using BlueRandom.Core.Logging;
 using BlueRandom.Core.Resources;
@@ -31,7 +32,7 @@ public partial class ConfigPanelWindow : Window
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     /// <summary>
-    /// 初始化配置面板窗体实例，挂载托盘与程序图标，并异步发起 WebView2 预热。
+    /// 初始化配置面板窗体实例，挂载托盘与程序图标。
     /// </summary>
     public ConfigPanelWindow()
     {
@@ -39,7 +40,6 @@ public partial class ConfigPanelWindow : Window
         var icon = ResourceCache.GetImage("app.ico");
         if (icon != null) Icon = icon;
         IpcBroker.Subscribe(IpcModule.Cp, OnIpcMessageReceived);
-        _ = InitializeWebViewAsync();
     }
 
     /// <summary>
@@ -66,10 +66,23 @@ public partial class ConfigPanelWindow : Window
         try
         {
             if (_isWebViewReady) return;
+            new WindowInteropHelper(this).EnsureHandle();
+            await InitializeWebViewCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("CP", "初始化 WebView2 失败", ex);
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
 
-            string userDataDir = Path.Combine(YamlConfigService.GetUserDataDir(), "EBWebView");
-            var env = await CoreWebView2Environment.CreateAsync(null, userDataDir);
-            await WebViewControl.EnsureCoreWebView2Async(env);
+    private async Task InitializeWebViewCoreAsync()
+    {
+        var env = await WebViewEnvironmentManager.GetEnvironmentAsync();
+        await WebViewControl.EnsureCoreWebView2Async(env);
 
             // 彻底清除并全局禁用 WebView2 HTTP 磁盘/内存/Storage 缓存 (防前端改动因缓存不生效)
             try
@@ -147,15 +160,6 @@ public partial class ConfigPanelWindow : Window
 
             _isWebViewReady = true;
             AppLogger.Info("CP", "WebView2 配置面板初始化就绪 (ResCache 全内存托管 + 禁用缓存模式)");
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Error("CP", "初始化 WebView2 失败", ex);
-        }
-        finally
-        {
-            _initLock.Release();
-        }
     }
 
     /// <summary>

@@ -60,6 +60,11 @@ public partial class ResultWindow : Window
     private bool _canClose = false;
     private int _currentSessionToken = 0;
 
+    /// <summary>
+    /// 最近一次展示的学员列表（供 NativeBridge.GetLastResultsJson 读取）。
+    /// </summary>
+    public List<CalledStudent> CurrentStudents { get; private set; } = new();
+
     private MediaPlayer? _sfxPlayer;
     private MediaPlayer? _bgmPlayer;
     private System.Windows.Threading.DispatcherTimer? _bgmFadeTimer;
@@ -330,6 +335,7 @@ public partial class ResultWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            CurrentStudents = students ?? new List<CalledStudent>();
             _currentSessionToken++;
             int thisToken = _currentSessionToken;
 

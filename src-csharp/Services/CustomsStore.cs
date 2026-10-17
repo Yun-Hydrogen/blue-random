@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using BlueRandom.Core.Config;
 using BlueRandom.Core.Logging;
 using System.Text.Json.Serialization;
 using YamlDotNet.Serialization;
@@ -112,6 +113,21 @@ public static class CustomsStore
             return rawBase64.Substring(commaIdx + 1).Trim();
         }
         return rawBase64.Trim();
+    }
+
+    /// <summary>
+    /// 标准化用途类别名称，兼容前端与历史传入的 "floating-icon"、"icon"、"gacha-sound"、"gachaSound"、"bgm" 等变体。
+    /// </summary>
+    /// <param name="purpose">原始用途字符串。</param>
+    /// <returns>收敛后的规范用途类别（icon / gachasound / bgm）。</returns>
+    public static string NormalizePurpose(string? purpose)
+    {
+        if (string.IsNullOrWhiteSpace(purpose)) return string.Empty;
+        string clean = purpose.Trim().ToLowerInvariant().Replace("-", "").Replace("_", "");
+        if (clean.Contains("icon")) return "icon";
+        if (clean.Contains("gacha") || clean == "sound") return "gachasound";
+        if (clean.Contains("bgm") || clean.Contains("music")) return "bgm";
+        return clean;
     }
 
     /// <summary>
@@ -220,5 +236,180 @@ public static class CustomsStore
         if (item == null || string.IsNullOrEmpty(item.Base64)) return null;
         string clean = CleanBase64(item.Base64);
         return $"data:{item.MimeType};base64,{clean}";
+    }
+
+    /// <summary>
+    /// 扫描并列出 customs/ 目录下所有已保存的有效自定义素材实体。
+    /// </summary>
+    /// <returns>自定义资源条目列表。</returns>
+    public static List<CustomResourceItem> ListAllCustoms()
+    {
+        var list = new List<CustomResourceItem>();
+        string dir = GetCustomsDir();
+        if (!Directory.Exists(dir)) return list;
+
+        var files = Directory.GetFiles(dir, "custom_*.yaml");
+        foreach (var file in files)
+        {
+            try
+            {
+                string yaml = File.ReadAllText(file, Encoding.UTF8);
+                var item = _deserializer.Deserialize<CustomResourceItem>(yaml);
+                if (item != null)
+                {
+                    if (string.IsNullOrEmpty(item.Id))
+                    {
+                        item.Id = Path.GetFileNameWithoutExtension(file);
+                    }
+                    list.Add(item);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("CustomsStore", $"读取自定义资源失败: {file}: {ex.Message}");
+            }
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// 启动时检查是否存在多个用于相同用途（purpose: icon, gachaSound, bgm）的资源；
+    /// 若有多个，仅保留时间戳最新的那一个并物理删除其余旧资源，同时自动将最新资源绑定装载到当前配置中。
+    /// </summary>
+    /// <param name="config">当前运行态 RootConfig 实例。</param>
+    /// <returns>若配置被修改返回 true，否则返回 false。</returns>
+    public static bool ConsolidateAndBindLatestResources(RootConfig config)
+    {
+        try
+        {
+            string dir = GetCustomsDir();
+            bool configChanged = false;
+
+            if (Directory.Exists(dir))
+            {
+                var files = Directory.GetFiles(dir, "custom_*.yaml");
+                if (files.Length > 0)
+                {
+                    // 1. 扫描所有可用资源并获取其最后修改时间与 Purpose
+                    var itemsWithFiles = new List<(CustomResourceItem item, string filePath, DateTime writeTime)>();
+                    foreach (var file in files)
+                    {
+                        try
+                        {
+                            string yaml = File.ReadAllText(file, Encoding.UTF8);
+                            var item = _deserializer.Deserialize<CustomResourceItem>(yaml);
+                            if (item != null && !string.IsNullOrWhiteSpace(item.Purpose))
+                            {
+                                if (string.IsNullOrEmpty(item.Id))
+                                {
+                                    item.Id = Path.GetFileNameWithoutExtension(file);
+                                }
+                                var fi = new FileInfo(file);
+                                itemsWithFiles.Add((item, file, fi.LastWriteTimeUtc));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            AppLogger.Warn("CustomsStore", $"解析资源失败，跳过: {file}: {ex.Message}");
+                        }
+                    }
+
+                    // 2. 按用途标准化归类后分组处理（兼容 floating-icon, gacha-sound, bgm 等前端格式）
+                    var groups = itemsWithFiles
+                        .Select(x => (x.item, x.filePath, x.writeTime, normPurpose: NormalizePurpose(x.item.Purpose)))
+                        .Where(x => !string.IsNullOrEmpty(x.normPurpose))
+                        .GroupBy(x => x.normPurpose);
+
+                    foreach (var group in groups)
+                    {
+                        string purpose = group.Key;
+                        // 按修改时间与 ID 降序，最新文件排在最前
+                        var sorted = group.OrderByDescending(x => x.writeTime).ThenByDescending(x => x.item.Id).ToList();
+                        var latest = sorted[0];
+
+                        // 如果存在多个相同用途的资源，只保留最新的，物理清理其余旧资源
+                        if (sorted.Count > 1)
+                        {
+                            for (int i = 1; i < sorted.Count; i++)
+                            {
+                                var oldItem = sorted[i];
+                                try
+                                {
+                                    if (File.Exists(oldItem.filePath))
+                                    {
+                                        File.Delete(oldItem.filePath);
+                                        AppLogger.Info("CustomsStore", $"[资源去重单例化] 清理相同用途 ({purpose}) 的过期旧资源: {oldItem.item.Id} ({oldItem.item.FileName})");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    AppLogger.Warn("CustomsStore", $"清理旧资源失败: {oldItem.filePath}: {ex.Message}");
+                                }
+                            }
+                        }
+
+                        // 3. 将该用途最新生效的资源自动绑定更新至当前配置中
+                        switch (purpose)
+                        {
+                            case "icon":
+                                if (config.FloatingButton.CustomIconId != latest.item.Id)
+                                {
+                                    config.FloatingButton.CustomIconId = latest.item.Id;
+                                    configChanged = true;
+                                    AppLogger.Info("CustomsStore", $"[资源装载] 悬浮球图标已自动装载最新资源: {latest.item.Id} ({latest.item.FileName})");
+                                }
+                                break;
+
+                            case "gachasound":
+                                if (config.PickResultDialog.GachaSoundCustomId != latest.item.Id)
+                                {
+                                    config.PickResultDialog.GachaSoundCustomId = latest.item.Id;
+                                    configChanged = true;
+                                    AppLogger.Info("CustomsStore", $"[资源装载] 抽卡音效已自动装载最新资源: {latest.item.Id} ({latest.item.FileName})");
+                                }
+                                break;
+
+                            case "bgm":
+                                if (config.PickResultDialog.BgmCustomId != latest.item.Id)
+                                {
+                                    config.PickResultDialog.BgmCustomId = latest.item.Id;
+                                    configChanged = true;
+                                    AppLogger.Info("CustomsStore", $"[资源装载] 背景音乐已自动装载最新资源: {latest.item.Id} ({latest.item.FileName})");
+                                }
+                                break;
+                        }
+                    }
+                }
+            }
+
+            // 4. 若配置中的自定义 ID 对应文件在磁盘上已不存在，安全回退重置
+            if (!string.IsNullOrEmpty(config.FloatingButton.CustomIconId) && LoadCustom(config.FloatingButton.CustomIconId) == null)
+            {
+                config.FloatingButton.CustomIconId = string.Empty;
+                configChanged = true;
+            }
+            if (!string.IsNullOrEmpty(config.PickResultDialog.GachaSoundCustomId) && LoadCustom(config.PickResultDialog.GachaSoundCustomId) == null)
+            {
+                config.PickResultDialog.GachaSoundCustomId = string.Empty;
+                configChanged = true;
+            }
+            if (!string.IsNullOrEmpty(config.PickResultDialog.BgmCustomId) && LoadCustom(config.PickResultDialog.BgmCustomId) == null)
+            {
+                config.PickResultDialog.BgmCustomId = string.Empty;
+                configChanged = true;
+            }
+
+            if (configChanged)
+            {
+                YamlConfigService.SaveConfig(config);
+            }
+
+            return configChanged;
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("CustomsStore", "整理与单例化自定义资源异常", ex);
+            return false;
+        }
     }
 }

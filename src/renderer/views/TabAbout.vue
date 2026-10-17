@@ -104,20 +104,40 @@
         <p class="about-item about-copyright">
           《蔚蓝点名》使用了部分来自《蔚蓝档案》和 Blue Archive 的游戏美术和音乐资源（可详见readme），这些资源的版权归 NEXON Korea Corp.、NEXON GAMES Co., Ltd.、Shanghai Yostar Co., Ltd. （根据发行地区确定）所有。
         </p>
+        <p class="about-item about-copyright">
+          本项目仅供学习和交流使用，不涉及任何商业用途。同时，除非您自行处理相关版权美术资源，否则倒卖本软件的源代码及其编译的二进制可执行文件可能会对第三方美术资源的版权造成侵犯。
+          如果您是通过付费渠道获得的本软件，在遇到软件问题时，请优先向您的提供者寻求帮助，我们不受理任何由使用第三方付费分发软件导致的任何问题。
+          同时，第三方来源通常并不安全，可能被植入恶意程序，请您谨慎使用。
+        </p>
       </div>
     </rizui_card>
 
     <rizui_card title="本项目为蔚蓝档案爱好者创作(Fan-Make)项目，请不要用于商业用途" :title-style="{'text-align':'center'}" :desc-style="{'textAlign':'center'}" desc="Code with ❤️ and AI by YunHydrogenP-云氢P | 惠州一中算法AI社&智能信息社"/>
 
+    <!-- 版本更新日志 (changelog.md) -->
+    <rizui_card v-if="changelogText" title="更新日志" desc="当前版本更新历史记录 (changelog.md)" icon="fa-solid fa-clock-rotate-left">
+      <rizui_md :model-value="changelogText" readonly height="auto" />
+    </rizui_card>
 
   </div>
 </template>
 
 <script setup>
-import { rizui_card } from 'riz-ui'
+import { ref, onMounted } from 'vue'
+import { rizui_card, rizui_mdeditor } from 'riz-ui'
 import { resolveAssetUrl } from '@/utils/asset'
 
+const rizui_md = rizui_mdeditor
 const props = defineProps({ appInfo: Object })
+const changelogText = ref('')
+
+onMounted(async () => {
+  if (window.configPanelApi?.getChangelog) {
+    try {
+      changelogText.value = await window.configPanelApi.getChangelog()
+    } catch (_) { }
+  }
+})
 </script>
 
 <style scoped>

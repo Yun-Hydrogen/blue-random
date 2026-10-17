@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.Json;
 using BlueRandom.Core.Config;
 using BlueRandom.Services;
@@ -15,10 +16,34 @@ using Xunit;
 namespace BlueRandom.Tests;
 
 /// <summary>
-/// 班级配置管理器与花名册管理单元测试集
+/// 班级配置管理器与花名册管理单元测试集（沙箱隔离，杜绝污染真实用户配置）
 /// </summary>
-public class ClassManagerTests
+public class ClassManagerTests : IDisposable
 {
+    private readonly string _sandboxDir;
+
+    public ClassManagerTests()
+    {
+        _sandboxDir = Path.Combine(Path.GetTempPath(), "BlueRandom_ClassTests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_sandboxDir);
+        YamlConfigService.OverrideUserDataDir = _sandboxDir;
+    }
+
+    public void Dispose()
+    {
+        YamlConfigService.OverrideUserDataDir = null;
+        try
+        {
+            if (Directory.Exists(_sandboxDir))
+            {
+                Directory.Delete(_sandboxDir, true);
+            }
+        }
+        catch
+        {
+            // 忽略临时文件释放延迟
+        }
+    }
     /// <summary>
     /// 验证班级实体与学员数据结构向前端序列化时遵循严格的小驼峰命名约定
     /// </summary>

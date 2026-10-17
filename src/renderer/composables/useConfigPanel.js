@@ -602,6 +602,10 @@ export function useConfigPanel() {
       updateStatus.value = r.status || ''
       updateTitle.value = r.title || ''
       updateDetail.value = r.detail || ''
+      /* 若返回的 detail 为空，回退读取本地 changelog.md */
+      if (!updateDetail.value && window.configPanelApi?.getChangelog) {
+        updateDetail.value = await window.configPanelApi.getChangelog()
+      }
       /* 兜底：未返回 releaseUrl 时仍给出 Releases 最新页（“无论是否有更新均可跳转”） */
       updateReleaseUrl.value = r.releaseUrl || 'https://github.com/Yun-Hydrogen/blue-random/releases/latest'
     }
@@ -820,6 +824,16 @@ export function useConfigPanel() {
     ])
     if (cfg) Object.assign(draft, JSON.parse(JSON.stringify(cfg)))
     loading.value = false
+
+    // 预读取本地更新日志 changelog.md
+    if (window.configPanelApi?.getChangelog && !updateDetail.value) {
+      window.configPanelApi.getChangelog().then(log => {
+        if (log && !updateDetail.value) {
+          updateDetail.value = log
+          updateTitle.value = `版本更新日志 (v${appInfo.version || ''})`
+        }
+      }).catch(() => {})
+    }
   }
 
   onMounted(async () => {

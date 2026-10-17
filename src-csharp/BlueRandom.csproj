@@ -48,6 +48,9 @@
     <EmbeddedResource Include="..\package.json">
       <LogicalName>package.json</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\changelog.md">
+      <LogicalName>changelog.md</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- 本地开发时输出公共资源以便快速热调试，但在单文件发布时不外置拷贝 -->
