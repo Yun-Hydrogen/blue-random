@@ -22,7 +22,8 @@ flowchart TD
 
     subgraph NativeUIs ["原生 UI 表现层 (WPF STA UI Threads)"]
         FCB["@FCB: 悬浮按钮窗口 (FloatingButtonWindow)"]
-        FRW["@FRW: 结果演播全屏窗口 (ResultWindow)"]
+        FRW["@FRW: 结果演播全屏窗口 (DCompResultWindow)"]
+        LRW["@LRW: 结果暂留浮窗 (LastResultWindow)"]
     end
 
     subgraph WebAdminUI ["WebUI 管理层 (WebView2 STA Thread)"]
@@ -44,6 +45,7 @@ flowchart TD
     %% 核心总线通信
     FCB <==>|"@FCB 消息通道 (POST / GET)"| Bus
     FRW <==>|"@FRW 消息通道 (POST / GET)"| Bus
+    LRW <==>|"@LRW 消息通道 (GET)"| Bus
     CPWindow <==>|"@CP 消息通道 (POST / GET)"| Bus
     Bus <==>|"异步调度与分发"| BS
     BS <-->|"状态同步与热重载"| CCache
@@ -84,12 +86,12 @@ flowchart TD
 namespace BlueRandom.Core.Ipc;
 
 public enum IpcAction { Init, Dest, Get, Post }
-public enum IpcModule { Ipc, Fcb, Frw, Cp }
+public enum IpcModule { Ipc, Fcb, Frw, Cp, Lrw }
 
 public sealed class IpcMessage
 {
     public IpcAction Action { get; init; }      // 动作语义: Init, Dest, Get, Post
-    public IpcModule Module { get; init; }      // 目标/来源模块: Ipc, Fcb, Frw, Cp
+    public IpcModule Module { get; init; }      // 目标/来源模块: Ipc, Fcb, Frw, Cp, Lrw
     public string Command { get; init; }        // 动作标识命令
     public object? Payload { get; init; }       // 强类型载荷数据
     public DateTime Timestamp { get; init; }    // 消息生成时间戳
@@ -129,11 +131,22 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | :--- | :---: | :---: | :--- | :--- |
 | **`ShowWindow`** | `GET` | 后端 $\to$ FRW | `FrwShowPayload` | 后端抽卡算法完成后下发。包含 `Amount` 和 `CalledStudents` 列表。FRW 淡入全屏遮罩、播放音效与 BGM、执行 15° 卡片倾斜与姓名逐个飞入弹跳动效。 |
 | **`CloseWindow`** | `GET` | 后端 $\to$ FRW | `null` | 主动指令平滑淡出并关闭演播窗口。 |
-| **`WindowClosed`** | `POST` | FRW $\to$ 后端 | `null` | 演播窗口完成退场动画后上报。后端重置 `IsDrawing = false` 并下发 `ShowWindow` 唤醒桌面悬浮球。 |
+| **`WindowClosed`** | `POST` | FRW $\to$ 后端 | `List<CalledStudent>` | 演播窗口完成退场动画后上报本轮名单。后端缓存为“上一次抽取结果”，重置 `IsDrawing = false`，下发 `ShowWindow` 唤醒桌面悬浮球，并在开启结果暂留时显示 LRW。 |
 | **`ApplyNewProp`** | `GET` | 后端 $\to$ FRW | `PickResultDialogConfig` | 热更新演播窗外观、背景半透明度与音量配置。 |
 | **`Destroy`** | `DEST` | 后端 $\to$ FRW | `null` | 停止所有音视频播放，销毁演播窗口并释放线程。 |
 
-#### 2.4.3 配置面板宿主模块 (`IpcModule.Cp`)
+#### 2.4.3 结果暂留浮窗模块 (`IpcModule.Lrw`)
+
+| 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
+| :--- | :---: | :---: | :--- | :--- |
+| **`ShowWindow`** | `GET` | 后端 $\to$ LRW | `LrwShowPayload` | 抽取演播结束且 `pickResultDialog.showLastResult = true` 时下发。窗口固定显示在主屏工作区右上角（16 DIP 边距），列出本轮学生与信封品阶。 |
+| **`HideWindow`** | `GET` | 后端 $\to$ LRW | `null` | 新抽取开始时、或关闭 `showLastResult` 开关时下发，淡出隐藏暂留浮窗。 |
+| **`ApplyNewProp`** | `GET` | 后端 $\to$ LRW | `PickResultDialogConfig` | 同步暂留浮窗的背景色、边框色、不透明度与自动关闭时长。 |
+| **`Destroy`** | `DEST` | 后端 $\to$ LRW | `null` | 关闭窗口并结束 LRW 线程消息循环。 |
+
+> LRW 的关闭按钮仅隐藏窗口（不影响配置开关），下一次抽取结束后会再次自动显示。
+
+#### 2.4.4 配置面板宿主模块 (`IpcModule.Cp`)
 
 | 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
 | :--- | :---: | :---: | :--- | :--- |
@@ -142,7 +155,7 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | **`OverwriteConfig`** | `GET` | 后端 $\to$ CP | `string` (YAML 文本) | 保存校验失败时回滚覆写，或后端主动向前端同步最新配置。 |
 | **`Destroy`** | `DEST` | 后端 $\to$ CP | `null` | 销毁配置面板窗口及 WebView2 运行时。 |
 
-#### 2.4.4 全局控制模块 (`IpcModule.Ipc`)
+#### 2.4.5 全局控制模块 (`IpcModule.Ipc`)
 
 | 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
 | :--- | :---: | :---: | :--- | :--- |
@@ -370,6 +383,7 @@ sequenceDiagram
     participant Scheduler as 核心调度器 (BackendScheduler)
     participant Engine as 抽卡算法 (LotteryEngine)
     participant FRW as @FRW 结果演播窗 (STA)
+    participant LRW as @LRW 结果暂留浮窗 (STA)
 
     User->>FCB: 点击选择器确认抽取按钮 (✓, 抽取 N 人)
     FCB->>FCB: 播放点击音效，收拢收起圆弧胶囊
@@ -382,6 +396,8 @@ sequenceDiagram
         Scheduler->>Scheduler: 设置 IsDrawing = true
         Scheduler->>Bus: GET @FCB.HideWindow()
         Bus->>FCB: 隐藏桌面悬浮按钮
+        Scheduler->>Bus: GET @LRW.HideWindow()
+        Bus->>LRW: 暂时隐藏上一次的结果暂留浮窗
 
         Scheduler->>Engine: LotteryEngine.Pick(StudentList, N, AllowRepeatDraw)
         Engine-->>Scheduler: 返回抽卡结果 (List<CalledStudent>, 包含信封颜色品质)
@@ -394,12 +410,17 @@ sequenceDiagram
 
         User->>FRW: 点击空白区域 / 按 Esc 键关闭
         FRW->>FRW: 淡出音乐与画面退场动画 (Dismiss)
-        FRW->>Bus: POST @FRW.WindowClosed()
-        Bus->>Scheduler: 分发 WindowClosed 消息
+        FRW->>Bus: POST @FRW.WindowClosed(calledStudents)
+        Bus->>Scheduler: 分发 WindowClosed 消息（缓存 LastResults）
 
         Scheduler->>Scheduler: 设置 IsDrawing = false
         Scheduler->>Bus: GET @FCB.ShowWindow()
         Bus->>FCB: 恢复显示桌面悬浮按钮并刷新置顶
+
+        opt pickResultDialog.showLastResult == true
+            Scheduler->>Bus: GET @LRW.ShowWindow(LrwShowPayload)
+            Bus->>LRW: 在屏幕右上角显示本轮结果
+        end
     end
 ```
 
@@ -519,7 +540,16 @@ public sealed class CalledStudent
 }
 ```
 
-### 7.3 `AppInfo` JSON 结构
+### 7.3 `LrwShowPayload`
+```csharp
+public sealed class LrwShowPayload
+{
+    public List<CalledStudent> CalledStudents { get; set; } = new();
+    public DateTime DrawnAt { get; set; }
+}
+```
+
+### 7.4 `AppInfo` JSON 结构
 ```json
 {
   "version": "26.10.02",
@@ -533,7 +563,7 @@ public sealed class CalledStudent
 }
 ```
 
-### 7.4 `ClassConfig` JSON 结构
+### 7.5 `ClassConfig` JSON 结构
 ```json
 {
   "classId": "classes_a1b2c3d4",
@@ -553,7 +583,7 @@ public sealed class CalledStudent
 }
 ```
 
-### 7.5 `CustomItem` JSON 结构
+### 7.6 `CustomItem` JSON 结构
 ```json
 {
   "id": "custom_1725000000000",
@@ -565,7 +595,7 @@ public sealed class CalledStudent
 }
 ```
 
-### 7.6 `UpdateCheckResult` JSON 结构
+### 7.7 `UpdateCheckResult` JSON 结构
 ```json
 {
   "ok": true,

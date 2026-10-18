@@ -99,7 +99,8 @@
       defaultPlayGachaSound, panelOpacity,
       panelBgColor, panelBorderColor,
       playMusic, soundVolume, musicVolume,
-      bgmStartTime, bgmFadeDuration
+      bgmStartTime, bgmFadeDuration,
+      showLastResult                      — 抽取结束后右上角保留结果
     }
     admin: {                                — 高级设置（管理员权限等）
       adminAutoStartTaskName, adminAutoStartAdmin,
@@ -336,13 +337,17 @@ export function useConfigPanel() {
       panelOpacity: 0.9,
       panelBgColor: '#ffffff',
       panelBorderColor: '#66ccff',
-      showDeco: true,
       playMusic: false,
       bgmCustomId: '',       // BGM 资源引用（customs/ 目录，空=未上传背景音乐）
       soundVolume: 80,
       musicVolume: 60,
       bgmStartTime: 0,
-      bgmFadeDuration: 1.5
+      bgmFadeDuration: 1.5,
+      showLastResult: false,             // 抽取结束后在屏幕右上角保留本次结果浮窗
+      lastResultBgColor: '#ffffff',      // 暂留浮窗背景色
+      lastResultBorderColor: '#66ccff',  // 暂留浮窗边框色
+      lastResultOpacity: 0.9,            // 暂留浮窗不透明度（0-1）
+      lastResultAutoCloseSeconds: 0      // 自动关闭时长（秒），0 = 不自动关闭
     },
     admin: {
       adminAutoStartPath: '',

@@ -7,24 +7,18 @@
         Background="{x:Null}"
         Topmost="True"
         ShowInTaskbar="False"
-        WindowState="Maximized"
+        WindowStartupLocation="Manual"
+        Width="740"
+        Height="669"
         KeyDown="OnWindowKeyDown">
 
-    <!-- 全屏遮罩层：rgba(0,0,0,0.01) 点击任意空白区域关闭 -->
-    <Grid x:Name="RootContainer" Background="#02000000" MouseDown="OnBackgroundMouseDown">
+    <!-- 内容包围盒（非全屏）：仅容纳立绘 + 面板 + 动画余量，降低 layered 窗口软件光栅化面积 -->
+    <Grid x:Name="RootContainer" Background="Transparent">
 
-        <!-- 纵向居中容器：顶部趴着的阿罗娜/普拉娜 + 招募主面板 -->
+        <!-- 纵向居中容器：招募主面板 -->
         <StackPanel x:Name="CenterContainer" 
                     HorizontalAlignment="Center" 
                     VerticalAlignment="Center">
-
-            <!-- 顶部装饰图：阿罗娜 & 普拉娜趴在线上 (零缝隙贴合下方卡片边框) -->
-            <Image x:Name="DecoImage" 
-                   Width="420" 
-                   HorizontalAlignment="Center" 
-                   Margin="0,0,0,-4"
-                   IsHitTestVisible="False"
-                   RenderOptions.BitmapScalingMode="HighQuality"/>
 
             <!-- 核心招募结果主面板容器 (承载入场飞入与缩放动画，将阴影独立隔离以确保文本绝对清晰) -->
             <Grid x:Name="PanelContainer"
@@ -86,15 +80,18 @@
                                Margin="0,20,0,10"
                                Visibility="Collapsed"/>
 
-                    <!-- 底部关闭操作胶囊条 (蔚蓝经典蓝底白字胶囊 + 高度32px + 24px内边距) -->
+                    <!-- 底部关闭操作胶囊条：唯一可点击关闭区域（未解锁时点击无效） -->
                     <Border x:Name="HintPill"
                             Background="#66CCFF"
                             Height="32"
                             CornerRadius="16"
                             Padding="26,0,26,0"
                             HorizontalAlignment="Center"
-                            Margin="0,24,0,2">
-                        <TextBlock Text="点击任意位置关闭"
+                            Margin="0,24,0,2"
+                            Cursor="Hand"
+                            MouseDown="OnClosePillMouseDown">
+                        <TextBlock x:Name="TxtHint"
+                                   Text="正在揭晓招募结果..."
                                    Foreground="#FFFFFF"
                                    FontSize="14"
                                    FontWeight="SemiBold"

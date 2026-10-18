@@ -158,7 +158,69 @@ pickResultDialog:
         Assert.Equal(75, migrated.PickResultDialog.SoundVolume);
 
         Assert.Equal(1, migrated.PickCountDialog.DefaultCount);
-        Assert.True(migrated.PickResultDialog.ShowDeco);
         Assert.Equal(BlueRandom.Core.AppVersion.Codename, migrated.ProtocolVersion);
+    }
+
+    /// <summary>
+    /// 验证"结果暂留浮窗"开关默认关闭，且能以 showLastResult 为键完成 YAML 双向往返。
+    /// </summary>
+    [Fact]
+    public void ShowLastResult_DefaultsFalseAndRoundTrips()
+    {
+        var defaults = new RootConfig().PickResultDialog;
+        Assert.False(defaults.ShowLastResult);
+        Assert.Equal(0.9, defaults.LastResultOpacity);
+        Assert.Equal(0, defaults.LastResultAutoCloseSeconds);
+        Assert.Equal("#ffffff", defaults.LastResultBgColor);
+        Assert.Equal("#66ccff", defaults.LastResultBorderColor);
+
+        var cfg = new RootConfig();
+        cfg.PickResultDialog.ShowLastResult = true;
+        cfg.PickResultDialog.LastResultBgColor = "#112233";
+        cfg.PickResultDialog.LastResultBorderColor = "#445566";
+        cfg.PickResultDialog.LastResultOpacity = 0.55;
+        cfg.PickResultDialog.LastResultAutoCloseSeconds = 30;
+
+        string yaml = YamlConfigService.ToYamlWithComments(cfg);
+        Assert.Contains("showLastResult: true", yaml);
+        Assert.Contains("lastResultBgColor: '#112233'", yaml);
+        Assert.Contains("lastResultBorderColor: '#445566'", yaml);
+        Assert.Contains("lastResultOpacity: 0.55", yaml);
+        Assert.Contains("lastResultAutoCloseSeconds: 30", yaml);
+
+        var deserializer = new YamlDotNet.Serialization.DeserializerBuilder()
+            .WithNamingConvention(YamlDotNet.Serialization.NamingConventions.CamelCaseNamingConvention.Instance)
+            .IgnoreUnmatchedProperties()
+            .Build();
+
+        var parsed = deserializer.Deserialize<RootConfig>(yaml);
+        Assert.True(parsed.PickResultDialog.ShowLastResult);
+        Assert.Equal("#112233", parsed.PickResultDialog.LastResultBgColor);
+        Assert.Equal("#445566", parsed.PickResultDialog.LastResultBorderColor);
+        Assert.Equal(0.55, parsed.PickResultDialog.LastResultOpacity);
+        Assert.Equal(30, parsed.PickResultDialog.LastResultAutoCloseSeconds);
+    }
+
+    /// <summary>
+    /// 验证结果暂留浮窗的透明度与自动关闭时长会被钳制到安全区间。
+    /// </summary>
+    [Fact]
+    public void Normalize_ClampsLastResultOptions()
+    {
+        var lower = new RootConfig();
+        lower.PickResultDialog.LastResultOpacity = 0.01;
+        lower.PickResultDialog.LastResultAutoCloseSeconds = -5;
+
+        var normalizedLower = YamlConfigService.Normalize(lower);
+        Assert.Equal(0.1, normalizedLower.PickResultDialog.LastResultOpacity);
+        Assert.Equal(0, normalizedLower.PickResultDialog.LastResultAutoCloseSeconds);
+
+        var upper = new RootConfig();
+        upper.PickResultDialog.LastResultOpacity = 9.0;
+        upper.PickResultDialog.LastResultAutoCloseSeconds = 99999;
+
+        var normalizedUpper = YamlConfigService.Normalize(upper);
+        Assert.Equal(1.0, normalizedUpper.PickResultDialog.LastResultOpacity);
+        Assert.Equal(3600, normalizedUpper.PickResultDialog.LastResultAutoCloseSeconds);
     }
 }

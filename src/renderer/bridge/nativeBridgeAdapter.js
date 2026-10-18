@@ -718,8 +718,7 @@ export function setupNativeBridgeAdapter() {
         musicVolume: 60,
         panelOpacity: 0.92,
         panelBgColor: '#ffffff',
-        panelBorderColor: '#66ccff',
-        showDeco: true
+        panelBorderColor: '#66ccff'
       }
     },
     getResults: async () => {

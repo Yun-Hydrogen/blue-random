@@ -2,7 +2,7 @@
 //  File: ResultWindow.xaml.cs
 //  Project: BlueRandom (WPF Native)
 //  Description:
-//    全屏沉浸式招募结果展示浮窗 (FRW: Floating Result Window)。
+//    招募结果展示浮窗 (FRW: Floating Result Window)。
 //
 //  Architecture & Visual Engineering Highlights:
 //    1. 还原经典手游招募动效体系：
@@ -13,11 +13,15 @@
 //    2. 解决 WPF 文本栅格化渲染缺陷：
 //       - 采用双层 Border 架构，将 DropShadowEffect 隔离于底层空白 Border，顶层实体 Border 承载纯净矢量文字，
 //         彻底杜绝 WPF 像素着色器导致的 ClearType 降级模糊；
+//       - 信封阴影改为预渲染进 PNG（Letter_*_Shadow.png，pad=20 / blur=14 / offsetY=6 / opacity=0.22），
+//         运行时不再挂 DropShadowEffect，10 抽动画期间省去 10 路高斯模糊重算。
 //    3. 音频与流媒体引擎：
 //       - 支持独立抽卡音效即时播放；
 //       - 基于 DispatcherTimer 驱动 30ms 粒度 BGM 渐入与离场平滑淡出 (Fade In / Fade Out)；
 //    4. 交互安全与状态防抖：
-//       - 内置基于 Token 与动画生命周期的 canClose 锁，防止用户误触提前关闭导致视觉截断。
+//       - 内置基于 Token 与动画生命周期的 canClose 锁，防止用户误触提前关闭导致视觉截断；
+//       - 窗口为内容包围盒（非全屏），仅底部“点击此处关闭”胶囊可触发关闭；
+//         窗口面积大幅缩小，降低 layered 透明窗口的软件光栅化开销（P0-1 性能优化）。
 // ============================================================================
 
 using System;
@@ -74,13 +78,12 @@ public partial class ResultWindow : Window
     private bool _isBgmFadingOut = false;
 
     /// <summary>
-    /// 初始化结果窗口，注入私有字体与立绘资源，并立即挂载 IPC 监听。
+    /// 初始化结果窗口，注入私有字体资源，并立即挂载 IPC 监听。
     /// </summary>
     public ResultWindow()
     {
         InitializeComponent();
         FontFamily = ResourceCache.CustomFont;
-        DecoImage.Source = ResourceCache.GetImage("Arona_Plana.png");
 
         // 构造函数即刻注册 IPC 消息监听，彻底规避 Loaded 陷阱
         IpcBroker.Subscribe(IpcModule.Frw, OnIpcMessageReceived);
@@ -326,6 +329,58 @@ public partial class ResultWindow : Window
     }
 
     /// <summary>
+    /// 按当前结果人数计算内容包围盒窗口尺寸并居中（非全屏）。
+    /// <para>
+    /// 设计常量与 ResultWindow.xaml 保持一致：
+    /// 卡片 196×147、卡片左右 Margin 16（相邻间距 32）、
+    /// 面板 Padding 48/24、边框 4、关闭胶囊 32 + 上边距 24 + 下边距 2、行间距 44。
+    /// 额外左右 160 / 上下 120 余量用于容纳信封入场动画（初始 scale 2.5）与阴影，
+    /// 避免信封放大阶段被窗口边界裁剪。
+    /// </para>
+    /// </summary>
+    /// <param name="count">本轮抽取人数（0 表示空结果）。</param>
+    private void UpdateWindowLayout(int count)
+    {
+        int rows = count > 5 ? 2 : 1;
+        int cols = Math.Clamp(count, 1, 5);
+
+        const double cardW = 196;
+        const double cardH = 147;
+        const double colGap = 32;
+        const double rowGap = 44;
+        const double panelBandX = 48 * 2 + 4 * 2;   // 左右 Padding + 边框
+        const double panelBandY = 24 + 20 + 4 * 2;  // 上下 Padding + 边框
+        const double hintBand = 32 + 24 + 2;        // 关闭胶囊高度 + 上下 Margin
+        const double decoWidth = 420;
+        const double decoHeight = 176;              // 420 × 506 / 1205 ≈ 176
+
+        double panelW = Math.Max(420, cols * cardW + Math.Max(cols - 1, 0) * colGap + panelBandX);
+        double panelH = rows * cardH + Math.Max(rows - 1, 0) * rowGap + panelBandY + hintBand;
+        double contentW = Math.Max(panelW, decoWidth);
+        double contentH = decoHeight - 4 + panelH;
+
+        /*
+         * 底部“点击此处关闭”胶囊：宽度约为抽取面板宽度的 75%，
+         * 并限制在面板内可用宽度内（面板宽度 - 左右 Padding/边框），避免小人数时溢出。
+         */
+        double hintMaxWidth = panelW - panelBandX;
+        HintPill.Width = Math.Clamp(panelW * 0.75, 260, hintMaxWidth);
+
+        // 动画溢出与阴影余量（保证信封 scale 2.5 阶段完整可见）
+        const double marginX = 160;
+        const double marginY = 120;
+
+        var workArea = SystemParameters.WorkArea;
+        double winW = Math.Min(contentW + marginX * 2, workArea.Width * 0.95);
+        double winH = Math.Min(contentH + marginY * 2, workArea.Height * 0.95);
+
+        Width = winW;
+        Height = winH;
+        Left = workArea.Left + (workArea.Width - winW) / 2;
+        Top = workArea.Top + (workArea.Height - winH) / 2;
+    }
+
+    /// <summary>
     /// 编排并呈现抽卡结果序列：
     /// 包括面板 0.7s cubic-bezier 飞入、信封 15° 倾角交错下落、BGM 起播以及防误触 canClose 锁定。
     /// </summary>
@@ -341,6 +396,8 @@ public partial class ResultWindow : Window
 
             _isClosing = false;
             _canClose = false;
+            TxtHint.Text = "正在揭晓抽取结果...";
+            HintPill.Opacity = 0.6;
 
             // 彻底清理并重置动画属性持有，解除 WPF FillBehavior.HoldEnd 属性锁
             CenterContainer.BeginAnimation(OpacityProperty, null);
@@ -358,13 +415,14 @@ public partial class ResultWindow : Window
             TopRowPanel.Children.Clear();
             BottomRowPanel.Children.Clear();
 
-            // 2. 装饰立绘与空状态判定
-            DecoImage.Visibility = props.ShowDeco ? Visibility.Visible : Visibility.Collapsed;
+            // 2. 空状态判定
             if (students.Count == 0)
             {
                 TxtEmptyResult.Visibility = Visibility.Visible;
                 BottomRowPanel.Visibility = Visibility.Collapsed;
                 _canClose = true;
+                TxtHint.Text = "点击此处关闭";
+                HintPill.Opacity = 1.0;
             }
             else
             {
@@ -397,16 +455,19 @@ public partial class ResultWindow : Window
             }
             catch { }
 
-            // 4. 显示并置顶当前全屏窗口
+            // 4. 计算内容包围盒窗口尺寸并居中（非全屏，降低 layered 窗口软件光栅化面积）
+            UpdateWindowLayout(students.Count);
+
+            // 5. 显示并置顶当前窗口
             Show();
             var hwnd = new WindowInteropHelper(this).Handle;
             WindowsSystemService.RefreshTopMost(hwnd);
 
-            // 5. 播放抽卡音效与背景音乐 (跟随配置音量、自定义资源、起播点与淡入淡出)
+            // 6. 播放抽卡音效与背景音乐 (跟随配置音量、自定义资源、起播点与淡入淡出)
             PlaySfx(props);
             PlayBgm(props);
 
-            // 6. 主卡片面板飞入动画 (panel-fly-in: 0.7s cubic-bezier(0.2, 0.8, 0.2, 1))
+            // 7. 主卡片面板飞入动画 (panel-fly-in: 0.7s cubic-bezier(0.2, 0.8, 0.2, 1))
             PanelContainer.RenderTransformOrigin = new Point(0.5, 0.5);
             var panelPop = new DoubleAnimation(0.85, 1.0, TimeSpan.FromMilliseconds(700))
             {
@@ -423,7 +484,7 @@ public partial class ResultWindow : Window
             PanelTranslate.BeginAnimation(TranslateTransform.YProperty, panelSlide);
             PanelContainer.BeginAnimation(OpacityProperty, panelFade);
 
-            // 7. 构造每个学员的卡片并分发行列
+            // 8. 构造每个学员的卡片并分发行列
             for (int i = 0; i < students.Count; i++)
             {
                 var student = students[i];
@@ -439,7 +500,7 @@ public partial class ResultWindow : Window
                 }
             }
 
-            // 8. 动画播完前锁定关闭 (canClose 机制：防误触关闭)
+            // 9. 动画播完前锁定关闭 (canClose 机制：防误触关闭)
             if (students.Count > 0)
             {
                 int totalDelayMs = (Math.Max(students.Count - 1, 0) * 120) + 600;
@@ -451,6 +512,8 @@ public partial class ResultWindow : Window
                         if (_currentSessionToken == thisToken)
                         {
                             _canClose = true;
+                            TxtHint.Text = "点击此处关闭";
+                            HintPill.Opacity = 1.0;
                         }
                     });
                 });
@@ -512,29 +575,22 @@ public partial class ResultWindow : Window
         cardTranslate.BeginAnimation(TranslateTransform.YProperty, cardTranslateAnim);
         cardGrid.BeginAnimation(OpacityProperty, cardFadeAnim);
 
-        // ====== 1. 信封底图图层 (充满容器，带独立柔和阴影，高清采样) ======
+        // ====== 1. 信封底图图层 (阴影已预渲染进 PNG，运行时零 Effect、动画期间零模糊重算) ======
+        /*
+         * 阴影图为 264×304（原图 216×256 + 四周 pad 24，双层阴影：近层 0.30 / 远层 0.40）。
+         * 以 152×175 显示时，信封本体恢复为 124×147（与旧版一致），
+         * 多出的上下 14px 为阴影留白，卡片 Grid 默认不裁剪。
+         */
         var envImage = new Image
         {
             Source = ResourceCache.GetEnvelopeImage(student.LetterColor),
-            Width = 196,
-            Height = 147,
+            Width = 152,
+            Height = 175,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
         RenderOptions.SetBitmapScalingMode(envImage, BitmapScalingMode.HighQuality);
-
-        var envShadow = new DropShadowEffect
-        {
-            Color = Colors.Black,
-            BlurRadius = 14,
-            ShadowDepth = 6,
-            Opacity = 0.22,
-            Direction = 270,
-            RenderingBias = RenderingBias.Performance
-        };
-        envShadow.Freeze();
-        envImage.Effect = envShadow;
         cardGrid.Children.Add(envImage);
 
         // ====== 2. 姓名卡片层 (纯白底，圆角 12px，信封中央浮现，完全跟随 15° 倾斜) ======
@@ -698,31 +754,30 @@ public partial class ResultWindow : Window
     }
 
     /// <summary>
-    /// 背景半透明蒙版点击事件：若已解锁关闭权限，则平滑退出。
+    /// 底部“点击此处关闭”胶囊：本窗口唯一的鼠标关闭入口。
+    /// 动画未解锁（_canClose=false）时点击无效，避免误触。
     /// </summary>
-    private void OnBackgroundMouseDown(object sender, MouseButtonEventArgs e)
+    private void OnClosePillMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_canClose && !_isClosing)
-        {
-            Dismiss();
-        }
+        e.Handled = true;
+        if (!_canClose || _isClosing) return;
+        Dismiss();
     }
 
     /// <summary>
-    /// 卡片主面板点击拦截事件：阻止事件向上传递至背景蒙版，防止误关。
+    /// 卡片主面板点击拦截事件：阻止点击面板内容冒泡（本窗口仅底部胶囊可关闭）。
     /// </summary>
     private void OnPanelMouseDown(object sender, MouseButtonEventArgs e)
     {
-        // 阻止点击卡片内容时误触发关闭
         e.Handled = true;
     }
 
     /// <summary>
-    /// 全局键盘快捷键响应：Esc / Enter / 空格键在解锁后均可快速关闭结果窗口。
+    /// 全局键盘快捷键响应：Esc 在解锁后可快速关闭（鼠标关闭仅限底部胶囊）。
     /// </summary>
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
-        if (_canClose && !_isClosing && (e.Key == Key.Escape || e.Key == Key.Enter || e.Key == Key.Space))
+        if (_canClose && !_isClosing && e.Key == Key.Escape)
         {
             Dismiss();
         }

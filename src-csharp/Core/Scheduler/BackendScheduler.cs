@@ -30,6 +30,21 @@ public static class BackendScheduler
     private static Timer? _debounceSaveTimer;
     private static DateTime _lastOverlaidTime = DateTime.MinValue;
 
+    private static List<CalledStudent> _lastResults = new();
+    private static DateTime _lastDrawAt = DateTime.MinValue;
+
+    /// <summary>最近一次抽取结果快照（供结果暂留浮窗与 NativeBridge 读取）。</summary>
+    public static IReadOnlyList<CalledStudent> LastResults
+    {
+        get { lock (_stateLock) { return _lastResults.ToArray(); } }
+    }
+
+    /// <summary>最近一次抽取完成的时间。</summary>
+    public static DateTime LastDrawAt
+    {
+        get { lock (_stateLock) { return _lastDrawAt; } }
+    }
+
     /// <summary>
     /// 初始化调度引擎，注册 FCB（悬浮球）、FRW（结果浮窗）、CP（配置面板）的 IPC 监听器。
     /// </summary>
@@ -152,8 +167,9 @@ public static class BackendScheduler
 
         AppLogger.Info("Backend", $"触发抽取学员，请求人数: {amount}");
 
-        // 步骤 2: 隐藏悬浮按钮
+        // 步骤 2: 隐藏悬浮按钮与上次的结果暂留浮窗，让出视觉焦点
         IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "HideWindow"));
+        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "HideWindow"));
 
         // 步骤 3: 执行核心加权抽卡算法
         var pool = ConfigCache.GetStudentPool();
@@ -205,7 +221,7 @@ public static class BackendScheduler
         switch (msg.Command)
         {
             case "WindowClosed":
-                HandleFrwWindowClosed();
+                HandleFrwWindowClosed(msg.Payload as List<CalledStudent>);
                 break;
 
             case "ErrorHappened":
@@ -217,24 +233,69 @@ public static class BackendScheduler
                     _isDrawing = false;
                 }
                 IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ShowWindow"));
+                RefreshLastResultWindow();
                 break;
         }
     }
 
     /// <summary>
     /// 招募结果浮窗关闭后的状态收敛处理。
-    /// 解除抽取互斥锁定，并发送 ShowWindow 唤醒悬浮球恢复桌面交互。
+    /// 解除抽取互斥锁定、缓存最近结果，并发送 ShowWindow 唤醒悬浮球恢复桌面交互。
     /// </summary>
-    private static void HandleFrwWindowClosed()
+    /// <param name="lastStudents">结果浮窗随 WindowClosed 上报的本次抽取名单。</param>
+    private static void HandleFrwWindowClosed(List<CalledStudent>? lastStudents)
     {
         AppLogger.Info("Backend", "结果浮窗已关闭，恢复悬浮按钮");
         lock (_stateLock)
         {
             _isDrawing = false;
+            if (lastStudents is { Count: > 0 })
+            {
+                _lastResults = new List<CalledStudent>(lastStudents);
+                _lastDrawAt = DateTime.Now;
+            }
         }
 
         // 恢复桌面悬浮球可见性
         IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ShowWindow"));
+
+        // 若开启"结果暂留浮窗"，在屏幕右上角保留本次结果
+        RefreshLastResultWindow();
+    }
+
+    /// <summary>
+    /// 依据当前配置与最近一次抽取结果，同步结果暂留浮窗（LRW）的样式与显隐。
+    /// 抽取演出进行中或未开启开关时保持隐藏。
+    /// </summary>
+    public static void RefreshLastResultWindow()
+    {
+        var props = ConfigCache.GetFRWProps();
+        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ApplyNewProp", props));
+
+        LrwShowPayload? payload = null;
+        if (props.ShowLastResult)
+        {
+            lock (_stateLock)
+            {
+                if (!_isDrawing && _lastResults.Count > 0)
+                {
+                    payload = new LrwShowPayload
+                    {
+                        CalledStudents = new List<CalledStudent>(_lastResults),
+                        DrawnAt = _lastDrawAt
+                    };
+                }
+            }
+        }
+
+        if (payload == null)
+        {
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "HideWindow"));
+            return;
+        }
+
+        AppLogger.Info("Backend", $"显示结果暂留浮窗，共 {payload.CalledStudents.Count} 人");
+        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ShowWindow", payload));
     }
 
     // ========================================================================
@@ -319,6 +380,7 @@ public static class BackendScheduler
             // 5. 热重载广播下发
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyNewProp", ConfigCache.GetFCBProps()));
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyNewProp", ConfigCache.GetFRWProps()));
+            RefreshLastResultWindow();
             return true;
         }
         catch (Exception ex)

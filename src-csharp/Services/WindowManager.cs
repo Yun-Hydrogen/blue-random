@@ -14,21 +14,24 @@ using BlueRandom.Core.Logging;
 using BlueRandom.UI.FCB;
 using BlueRandom.UI.FRW;
 using BlueRandom.UI.CP;
+using BlueRandom.UI.LRW;
 
 namespace BlueRandom.Services;
 
 /// <summary>
 /// 多线程窗口调度管理器 (Window Manager)。
-/// 负责为 FCB、FRW、CP 分配独立的 STA 线程与消息循环，实现各 UI 模块之间的渲染负载与卡顿隔离。
+/// 负责为 FCB、FRW、LRW、CP 分配独立的 STA 线程与消息循环，实现各 UI 模块之间的渲染负载与卡顿隔离。
 /// </summary>
 public static class WindowManager
 {
     private static Thread? _fcbThread;
     private static Thread? _frwThread;
     private static Thread? _webUiThread;
+    private static Thread? _lrwThread;
+    private static LastResultWindow? _lrwWindow;
 
     /// <summary>
-    /// 并发拉起悬浮球 (FCB)、结果浮窗 (FRW) 与配置面板 (CP) 的独立 STA UI 线程，并启动系统托盘监听。
+    /// 并发拉起悬浮球 (FCB)、结果浮窗 (FRW)、结果暂留浮窗 (LRW) 与配置面板 (CP) 的独立 STA UI 线程，并启动系统托盘监听。
     /// <para>
     /// 架构隔离与线程安全优势（2026-10-17 更新）：
     /// 1. FCB 线程专职监听鼠标拖拽与 60FPS 呼吸/旋转动画，不受任何复杂渲染或 Chromium 引擎阻塞；
@@ -66,13 +69,13 @@ public static class WindowManager
         _fcbThread.SetApartmentState(ApartmentState.STA);
         _fcbThread.Start();
 
-        // 2. 结果浮窗 (FRW) 独立线程：纯 WPF 原生透明窗口（无 WebView2，UIAccess 兼容）
+        // 2. 结果浮窗 (FRW) 独立线程：DirectComposition + D3D11 + D2D 透明窗口
         _frwThread = new Thread(() =>
         {
             try
             {
-                var frwWin = new ResultWindow();
-                Dispatcher.Run();
+                var frwWin = new DCompResultWindow();
+                frwWin.Run();
             }
             catch (Exception ex)
             {
@@ -106,7 +109,28 @@ public static class WindowManager
         _webUiThread.SetApartmentState(ApartmentState.STA);
         _webUiThread.Start();
 
-        // 4. 初始化系统托盘图标
+        // 4. 结果暂留浮窗 (LRW) 独立线程：按需显示在屏幕右上角
+        _lrwThread = new Thread(() =>
+        {
+            try
+            {
+                _lrwWindow = new LastResultWindow();
+                AppLogger.Info("WinMgr", "LRW 结果暂留浮窗线程就绪");
+                Dispatcher.Run();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("WinMgr", "LRW 线程崩溃", ex);
+            }
+        })
+        {
+            Name = "LRW_UI_Thread",
+            IsBackground = true
+        };
+        _lrwThread.SetApartmentState(ApartmentState.STA);
+        _lrwThread.Start();
+
+        // 5. 初始化系统托盘图标
         TrayService.Initialize();
 
         AppLogger.Info("WinMgr", "所有 UI 线程与托盘已成功挂载");

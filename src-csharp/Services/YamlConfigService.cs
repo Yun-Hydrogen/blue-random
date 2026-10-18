@@ -276,6 +276,8 @@ public static class YamlConfigService
         cfg.PickResultDialog.SoundVolume = Math.Clamp(cfg.PickResultDialog.SoundVolume, 0, 100);
         cfg.PickResultDialog.MusicVolume = Math.Clamp(cfg.PickResultDialog.MusicVolume, 0, 100);
         cfg.PickResultDialog.PanelOpacity = Math.Clamp(cfg.PickResultDialog.PanelOpacity, 0.1, 1.0);
+        cfg.PickResultDialog.LastResultOpacity = Math.Clamp(cfg.PickResultDialog.LastResultOpacity, 0.1, 1.0);
+        cfg.PickResultDialog.LastResultAutoCloseSeconds = Math.Clamp(cfg.PickResultDialog.LastResultAutoCloseSeconds, 0, 3600);
 
         return cfg;
     }
@@ -348,7 +350,12 @@ public static class YamlConfigService
         sb.AppendLine($"  panelOpacity: {cfg.PickResultDialog.PanelOpacity.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}");
         sb.AppendLine($"  panelBgColor: '{cfg.PickResultDialog.PanelBgColor}'");
         sb.AppendLine($"  panelBorderColor: '{cfg.PickResultDialog.PanelBorderColor}'");
-        sb.AppendLine($"  showDeco: {(cfg.PickResultDialog.ShowDeco ? "true" : "false")}");
+        sb.AppendLine($"  # 抽取结束后在屏幕右上角保留本次结果浮窗");
+        sb.AppendLine($"  showLastResult: {(cfg.PickResultDialog.ShowLastResult ? "true" : "false")}");
+        sb.AppendLine($"  lastResultBgColor: '{cfg.PickResultDialog.LastResultBgColor}'");
+        sb.AppendLine($"  lastResultBorderColor: '{cfg.PickResultDialog.LastResultBorderColor}'");
+        sb.AppendLine($"  lastResultOpacity: {cfg.PickResultDialog.LastResultOpacity.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}");
+        sb.AppendLine($"  lastResultAutoCloseSeconds: {cfg.PickResultDialog.LastResultAutoCloseSeconds}");
 
         sb.AppendLine();
         sb.AppendLine("# ---- 高级与系统权限 ----");

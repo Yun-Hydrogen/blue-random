@@ -9,3 +9,6 @@ publish/
 /dist-electron
 /configs
 .vs/
+
+# 本地 Agent 知识库（仅本地维护，不提交）
+Agent/

@@ -99,6 +99,7 @@ public class NativeBridge
             ConfigCache.Current = YamlConfigService.Normalize(cfg);
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyNewProp", ConfigCache.GetFCBProps()));
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyNewProp", ConfigCache.GetFRWProps()));
+            BackendScheduler.RefreshLastResultWindow();
         }
         return ok;
     }
@@ -649,8 +650,7 @@ public class NativeBridge
             bgmDataUrl = bgmDataUrl,
             panelOpacity = props.PanelOpacity,
             panelBgColor = props.PanelBgColor,
-            panelBorderColor = props.PanelBorderColor,
-            showDeco = props.ShowDeco
+            panelBorderColor = props.PanelBorderColor
         };
         return JsonSerializer.Serialize(dto, JsonOptions);
     }
@@ -661,12 +661,7 @@ public class NativeBridge
     /// <returns>JSON 序列化学生列表。</returns>
     public string GetLastResultsJson()
     {
-        if (_hostWindow is BlueRandom.UI.FRW.ResultWindow frw)
-        {
-            var students = frw.CurrentStudents;
-            return JsonSerializer.Serialize(students, JsonOptions);
-        }
-        return "[]";
+        return JsonSerializer.Serialize(BackendScheduler.LastResults, JsonOptions);
     }
 
     /// <summary>

@@ -32,7 +32,9 @@ public enum IpcModule
     Ipc,
     Fcb,
     Frw,
-    Cp
+    Cp,
+    /// <summary>结果暂留浮窗（Last Result Window）。</summary>
+    Lrw
 }
 
 /// <summary>
@@ -101,4 +103,13 @@ public class FrwShowPayload
 {
     public int Amount { get; set; }
     public List<CalledStudent> CalledStudents { get; set; } = new();
+}
+
+/// <summary>
+/// 结果暂留浮窗展示载荷。
+/// </summary>
+public class LrwShowPayload
+{
+    public List<CalledStudent> CalledStudents { get; set; } = new();
+    public DateTime DrawnAt { get; set; }
 }

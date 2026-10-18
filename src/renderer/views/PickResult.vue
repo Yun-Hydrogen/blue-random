@@ -4,7 +4,7 @@
   模块: 招募结果浮窗 (基于透明 WebView2 硬件加速渲染)
   特性:
     1. 还原经典手游招募动效：信封倾角飞入、姓名条逐一弹跳揭晓；
-    2. 视效增强：深度高斯漫反射投影、4px 蔚蓝圆角边框、阿罗娜/普拉娜顶部贴合立绘；
+    2. 视效增强：深度高斯漫反射投影、4px 蔚蓝圆角边框；
     3. 交互限制：禁用全屏空白处点击关闭，在卡片面板底部设置专用“点击此处关闭”长条胶囊提示；
     4. 音频与流媒体：抽卡短音效即时回放、BGM 平滑淡入与退场淡出。
 
@@ -24,17 +24,8 @@
     tabindex="0"
     @keydown="handleKeydown"
   >
-    <!-- ====== 中央区域：装饰图 + 结果面板 ====== -->
+    <!-- ====== 中央区域：结果面板 ====== -->
     <div class="result-center">
-      <!-- 顶部装饰：阿罗娜 & 普拉娜趴在线上 -->
-      <img
-        v-if="showDeco"
-        class="result-deco-top"
-        :src="resolveAssetUrl('/image/Arona_Plana.png')"
-        alt=""
-        draggable="false"
-      />
-
       <!-- ====== 结果面板（中央圆角卡片） ====== -->
       <div
         class="result-panel"
@@ -206,7 +197,6 @@ const bgmFadeDuration = ref(1.5)
 const panelOpacity = ref(0.92)
 const panelBgColor = ref('#ffffff')
 const panelBorderColor = ref('#66ccff')
-const showDeco = ref(true)
 
 const panelStyle = computed(() => {
   let hex = panelBgColor.value || '#ffffff'
@@ -514,7 +504,6 @@ async function loadSoundConfig() {
   panelOpacity.value = Number(cfg.panelOpacity) || 0.92
   panelBgColor.value = cfg.panelBgColor || '#ffffff'
   panelBorderColor.value = cfg.panelBorderColor || '#66ccff'
-  showDeco.value = cfg.showDeco !== false
 }
 
 let removeOpenListener = null
@@ -617,23 +606,12 @@ onBeforeUnmount(() => {
   animation: result-fade-out 220ms ease forwards;
 }
 
-/* 中央装饰图 + 面板纵向容器 */
+/* 中央面板纵向容器 */
 .result-center {
   display: flex;
   flex-direction: column;
   align-items: center;
   max-width: 95vw;
-}
-
-/* 顶部装饰图：阿罗娜 & 普拉娜贴边 */
-.result-deco-top {
-  display: block;
-  width: 320px;
-  height: auto;
-  margin-bottom: -4px;
-  pointer-events: none;
-  user-select: none;
-  z-index: 2;
 }
 
 /* 结果主面板 */

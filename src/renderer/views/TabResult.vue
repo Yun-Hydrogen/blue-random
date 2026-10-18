@@ -7,11 +7,12 @@
 ================================================================================
   一、功能概述
 ================================================================================
-  配置抽取结果浮窗的外观、音效及联动功能。包含三张卡片：
+  配置抽取结果浮窗的外观、音效及联动功能。包含四张卡片：
 
     卡片         | 功能
     ─────────────┼──────────────────────────────────────────
     浮窗外观     | 背景/边框颜色、透明度、装饰角色显示开关
+    结果暂留浮窗 | 抽取结束后在屏幕右上角保留本次结果，可手动关闭
     音效控制     | 抽取音效开关与音量；背景音乐上传（customs）与开关/音量/起始位置/淡入淡出
     联动         | ClassIsland 播报（暂未实现，notReady 遮罩）
 
@@ -80,17 +81,52 @@
       <rizui_cfgrow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明">
         <rizui_slider :model-value="opacityPercent" :min="10" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResult',{...pickResult,panelOpacity:$event/100})" />
       </rizui_cfgrow>
-      <!-- 装饰角色开关 -->
-      <rizui_cfgrow label="结果浮窗顶部装饰" hint="结果浮窗顶部是否显示小阿罗娜&小普拉娜两小只">
-        <rizui_switch :model-value="pickResult.showDeco !== false" :color="tabTheme" @update:model-value="$emit('update:pickResult',{...pickResult,showDeco:$event})" />
-      </rizui_cfgrow>
-      <rizui_cfgrow label="" hint="" v-if="pickResult.showDeco == true" stack>
-      <img :src="resolveAssetUrl('/image/Arona_Plana.png')" style="margin:auto; height: 66px; display: block;"/>  
-      </rizui_cfgrow>  
+      <rizui_infobox 
+        type="error"
+        text="由于性能优化，我们已移除了普拉娜&阿罗娜两小只"
+      />
     </rizui_card>
 
     <!--
-      二、音效控制
+      二、结果暂留浮窗
+      抽取结束后在屏幕右上角保留本次结果
+    -->
+    <rizui_card title="结果暂留浮窗" desc="抽取结束后在屏幕右上角保留本次结果" icon="fa-solid fa-thumbtack">
+      <rizui_cfgrow label="启用结果暂留浮窗" hint="开启后，抽取结束会在屏幕右上角显示本次抽取结果；点按浮窗上的 ✕ 可暂时关闭">
+        <rizui_switch
+          :model-value="pickResult.showLastResult === true"
+          :color="tabTheme"
+          @update:model-value="$emit('update:pickResult',{...pickResult,showLastResult:$event})"
+        />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="浮窗背景颜色" hint="结果暂留浮窗的整体底色" :disabled="!pickResult.showLastResult">
+        <rizui_colorpicker v-model="pickResult.lastResultBgColor" :color="tabTheme" teleport=".config-left" />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="浮窗边框颜色" hint="结果暂留浮窗的外框描边颜色" :disabled="!pickResult.showLastResult">
+        <rizui_colorpicker v-model="pickResult.lastResultBorderColor" :color="tabTheme" teleport=".config-left" />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明" :disabled="!pickResult.showLastResult">
+        <rizui_slider
+          :model-value="lastResultOpacityPercent"
+          :min="10" :max="100"
+          :color="tabTheme" display="%"
+          @update:model-value="$emit('update:pickResult',{...pickResult,lastResultOpacity:$event/100})"
+        />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="自动关闭时长" hint="0 表示不自动关闭；大于 0 时浮窗底部显示倒计时" :disabled="!pickResult.showLastResult">
+        <rizui_slider
+          :model-value="pickResult.lastResultAutoCloseSeconds ?? 0"
+          :min="0" :max="300" :step="5"
+          :color="tabTheme"
+          :display-value="autoCloseDisplay"
+          @update:model-value="$emit('update:pickResult',{...pickResult,lastResultAutoCloseSeconds:$event})"
+        />
+      </rizui_cfgrow>
+      <rizui_infobox text="暂留浮窗会在下一次抽取开始时自动隐藏，抽取结束后重新显示；关闭开关会立即隐藏浮窗。自动关闭倒计时从每次显示时开始计算。" />
+    </rizui_card>
+
+    <!--
+      三、音效控制
       抽取音效 / BGM 的开关、音量、时间参数
     -->
     <rizui_card title="音效控制" desc="抽取时的音频反馈设置" icon="fa-solid fa-music">
@@ -150,7 +186,7 @@
     </rizui_card>
 
     <!--
-      三、联动
+      四、联动
       与其他桌面软件的集成功能
     -->
     <rizui_card title="联动" desc="与其他软件的联动功能" icon="fa-solid fa-link">
@@ -186,6 +222,17 @@ const tabTheme = '#55cc99'
  * rizui_slider 的 @update:model-value 中直接 $event/100 转回小数并 emit。
  */
 const opacityPercent = computed(() => Math.round((props.pickResult.panelOpacity || 0.9) * 100))
+
+/* 结果暂留浮窗透明度：config 存 0-1，UI 显示 10-100% */
+const lastResultOpacityPercent = computed(() =>
+  Math.round((props.pickResult.lastResultOpacity ?? 0.9) * 100)
+)
+
+/* 自动关闭时长显示：0 表示不自动关闭 */
+const autoCloseDisplay = computed(() => {
+  const seconds = Number(props.pickResult.lastResultAutoCloseSeconds) || 0
+  return seconds <= 0 ? '不自动关闭' : `${seconds}s`
+})
 
 /**
  * 将秒数格式化为分秒展示格式 (MM:SS)。

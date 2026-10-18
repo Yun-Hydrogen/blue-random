@@ -23,7 +23,7 @@
 
 ## 二、 进程与线程拓扑模型
 
-全系统运行于单个 C# 宿主进程内，内部划分为四个职责高度独立的执行线程：
+全系统运行于单个 C# 宿主进程内，内部划分为一个后台调度线程与四个职责高度独立的 STA UI 线程：
 
 ```mermaid
 flowchart TD
@@ -46,13 +46,17 @@ flowchart TD
         end
 
         subgraph FRWThread ["线程 3: 结果浮窗 FRW 独立线程 (STA UI Thread)"]
-            FRWWin["WPF 原生全屏透明置顶演播窗 (ResultWindow)"]
-            EnvelopeAnim["信封入场飞入 / 撕开 / 彩光演播 (Storyboard)"]
+            FRWWin["DirectComposition 全屏透明置顶演播窗 (DCompResultWindow)"]
+            EnvelopeAnim["信封入场飞入 / 撕开 / 彩光演播"]
             CardsGrid["学生卡片动态流式网格渲染"]
             AudioPlayer["MediaPlayer 招募音效与背景音乐同步播放"]
         end
 
-        subgraph CPThread ["线程 4: 配置面板 CP 独立线程 (STA UI Thread)"]
+        subgraph LRWThread ["线程 4: 结果暂留浮窗 LRW 独立线程 (STA UI Thread)"]
+            LRWWin["WPF 右上角暂留窗 (LastResultWindow)"]
+        end
+
+        subgraph CPThread ["线程 5: 配置面板 CP 独立线程 (STA UI Thread)"]
             CPWin["WPF 宿主窗口 (ConfigPanelWindow)"]
             WV2["Microsoft WebView2 运行时 (加载 Vue 3 前端)"]
             Bridge["NativeBridge COM 宿主对象 (直连 classes/ 与 customs/)"]
@@ -67,6 +71,7 @@ flowchart TD
 
     FCBWin <-->|@FCB 消息| Bus
     FRWWin <-->|@FRW 消息| Bus
+    LRWWin <-->|@LRW 消息| Bus
     WV2 <-->|@CP 消息| Bus
     WV2 <==>|HostObject 直连| Bridge
 ```
@@ -77,7 +82,8 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | **Backend & IPC 线程** | 后台任务 / 线程池 | `Task` 异步调度 | 运行核心总线消息循环分发；管理加权抽卡算法、并发状态机；维护内存中 Config Cache 与磁盘落盘持久化。 |
 | **FCB 悬浮按钮线程** | 原生 WPF UI 线程 | `STAThread` + 独立 `Dispatcher` | 渲染桌面透明圆形悬浮按钮；监听鼠标事件、处理拖拽位置与屏幕边缘吸附；控制 1~10 抽胶囊选择器的展开动画。 |
-| **FRW 结果浮窗线程** | 原生 WPF UI 线程 | `STAThread` + 独立 `Dispatcher` | 负责全屏透明招募演播展示；播放信封飞入、拆封粒子光晕与卡片翻转动画；管理音频播放器与 BGM 渐入渐出。 |
+| **FRW 结果浮窗线程** | 原生 DirectComposition + WPF 位图 | `STAThread` + Win32 消息循环 | 负责全屏透明招募演播展示；播放信封飞入、拆封粒子光晕与卡片翻转动画；管理音频播放器与 BGM 渐入渐出。 |
+| **LRW 结果暂留线程** | 原生 WPF UI 线程 | `STAThread` + 独立 `Dispatcher` | 抽取结束后在主屏右上角展示上一轮结果；支持关闭与配置热更新；新抽取开始时自动隐藏。 |
 | **CP 配置面板线程** | 原生 WPF UI 线程 | `STAThread` + 独立 `Dispatcher` | 承载 WebView2 浏览器控件；渲染 Vue 3 配置页面；挂载 `NativeBridge` 处理多班级与自定义资源文件 IO。 |
 
 > [!NOTE]
@@ -115,7 +121,7 @@ flowchart LR
 - **定位**：运行时展示所需的美术、音频及字体句柄集合。
 - **预载与优化策略**：
   - **字体缓存**：在应用启动阶段（Stage 3）通过 WPF `FontFamily` 预加载 `public/fonts/UI.ttf`（南西新圆体），界面渲染直接引用内存字体实例。
-  - **信封与立绘纹理**：将 `Letter_Rainbow.png`（彩信封）、`Letter_Gold.png`（金信封）、`Letter_Blue.png`（蓝信封）及 `Arona_Plana.png` 预解码为 WPF `BitmapImage` 并执行 `Freeze()` 冻结。冻结后的位图不可修改且天然跨线程安全，可同时供各 STA 线程直接绘制，避免重复解码与显存颠簸。
+  - **信封纹理**：将 `Letter_Rainbow.png`（彩信封）、`Letter_Gold.png`（金信封）、`Letter_Blue.png`（蓝信封）预解码为 WPF `BitmapImage` 并执行 `Freeze()` 冻结。冻结后的位图不可修改且天然跨线程安全，可同时供各 STA 线程直接绘制，避免重复解码与显存颠簸。
   - **音效流缓存**：将按钮点击音效 `button_click.wav` 读入内存字节缓冲，点击即可即时触发音频播放。
 
 ---
@@ -199,10 +205,11 @@ flowchart TD
   - 拖拽松手即时基于屏幕 `WorkArea` 纠偏，并通过 600ms 防抖静默落盘写入。
 
 ### 6.2 原生结果演播浮窗 (@FRW - Floating Result Window)
+
+> 当前实际实现为 [DCompResultWindow.cs](../src-csharp/UI/FRW/DCompResultWindow.cs)（DirectComposition + D3D11 + Direct2D，单 surface 即时模式渲染）；下方 WPF 图层参数描述的是同一视觉规范。
+
 - **视觉风格与舞台**：
   - 全屏透明置顶覆盖层，背景采用通透全屏层（`#02000000`），点击任意空白区域或按下 `Esc` / `Space` / `Enter` 键平滑淡出关闭。
-- **顶部立绘无缝衔接**：
-  - 顶部居中放置 `Arona_Plana.png`（宽度 320px），`Margin="0,0,0,-4"` 与主结果面板顶边外框无缝贴合。
 - **核心招募主面板 (`MainPanel`)**：
   - 22px 圆角，4px 蔚蓝实线边框（`#66CCFF`），92% 纯白半透底色（`#EBFFFFFF`），`0 8px 32px rgba(6, 22, 48, 0.15)` 柔和弥散阴影。
   - 唤醒时执行 `panel-fly-in` 动画：缩放 `0.85 -> 1.0`，位移 `16px -> 0`，配合 `CubicEase` 缓出，用时 0.7 秒。
@@ -220,6 +227,14 @@ flowchart TD
   - 动画播放完毕前锁定关闭，防止用户手快误触空白背景中断精彩动画；在 `readyDelay = totalDelay + 450ms` 后方可点击关闭。
   - 退出时执行 `panel-fly-out` 缩放淡出（0.2 秒），窗口平滑隐退后向后端发送 `WindowClosed` 恢复悬浮按钮。
 - **底部提示胶囊**：经典天蓝底色白字胶囊条（“点击任意位置关闭”），内置 `CharacterSpacing="200"` 呈现优雅字间距。
+
+### 6.3 结果暂留浮窗 (@LRW - Last Result Window)
+- **开关**：配置面板「结果浮窗 → 结果暂留浮窗」，对应 `pickResultDialog.showLastResult`（默认关闭）。
+- **显示时机**：FRW 上报 `WindowClosed` 且携带本轮名单后，若开关开启，则在主屏工作区右上角显示（16 DIP 边距）。
+- **交互**：无边框、透明、置顶、不抢焦点；标题栏右侧 ✕ 仅隐藏窗口，下一次抽取结束后自动重新显示。
+- **生命周期**：下一次抽取开始时自动隐藏，避免与全屏演播重叠；关闭开关后立即淡出隐藏。
+- **视觉**：18px 圆角卡片、可配置描边/底色/不透明度与柔和阴影；姓名左侧以品阶圆点区分（彩 = 紫、金 = 金、蓝 = 蓝），圆点内无文字；超过可用高度时列表滚动。
+- **自动关闭**：可配置 `lastResultAutoCloseSeconds`（0 = 不自动关闭），开启后底部显示逐秒倒计时，归零时淡出隐藏。
 
 ---
 

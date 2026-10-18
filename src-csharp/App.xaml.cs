@@ -39,6 +39,35 @@ public partial class App : Application
         // 阶段 -1 极速硬加载：立即解压注册 UI.ttf 字体与应用 Logo，确保启动器窗口即刻拥有自定义字体与高清徽标
         ResourceCache.EarlyInit(AppDomain.CurrentDomain.BaseDirectory);
 
+        // 独立 Demo：BLUERANDOM_DCOMP_FRW_DEMO=1 时跳过启动流水线，仅运行 DComp 结果窗（用于视觉验证）
+        if (Environment.GetEnvironmentVariable("BLUERANDOM_DCOMP_FRW_DEMO") == "1")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            try { ResourceCache.Preload(AppDomain.CurrentDomain.BaseDirectory); } catch { }
+
+            var demoThread = new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    new BlueRandom.UI.FRW.DCompResultWindow().Run();
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("DCompDemo", "演示线程异常", ex);
+                }
+            });
+            demoThread.SetApartmentState(System.Threading.ApartmentState.STA);
+            demoThread.IsBackground = false;
+            demoThread.Start();
+            return;
+        }
+
+        // 技术原型：DirectComposition 透明窗口（环境变量 BLUERANDOM_DCOMP_PROBE=1 时启用）
+        if (Environment.GetEnvironmentVariable("BLUERANDOM_DCOMP_PROBE") == "1")
+        {
+            BlueRandom.UI.FRW.DCompProbe.Start();
+        }
+
         // 实例化原生启动器窗口
         var splash = new SplashWindow();
         splash.Show();

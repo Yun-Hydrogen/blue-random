@@ -227,7 +227,6 @@ public static class ResourceCache
             "Letter_Gold.png",
             "Letter_Blue.png",
             "Arona_Empty.png",
-            "Arona_Plana.png",
             "BlueRandom.png",
             "app.ico",
             "tray.png"
@@ -368,7 +367,7 @@ public static class ResourceCache
     /// <summary>
     /// 从内存预热池中快速获取已冻结（Frozen）的 WPF 原生位图资源。
     /// </summary>
-    /// <param name="key">图片键名（如 "BlueRandom.png"、"Arona_Plana.png"）。</param>
+    /// <param name="key">图片键名（如 "BlueRandom.png"、"Letter_Gold.png"）。</param>
     /// <returns>可跨线程直接绑定的 ImageSource；未找到时返回 null。</returns>
     public static ImageSource? GetImage(string key)
     {
@@ -388,6 +387,8 @@ public static class ResourceCache
             "blue" => "Letter_Blue.png",
             _ => "Letter_Rainbow.png"
         };
+
+        // 直接使用原始信封素材；阴影由结果浮窗在预渲染阶段用 DropShadowEffect 生成
         return GetImage(key);
     }
 
