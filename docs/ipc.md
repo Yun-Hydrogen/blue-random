@@ -122,6 +122,7 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | **`HideWindow`** | `GET` | 后端 $\to$ FCB | `null` | 隐藏悬浮球（抽卡演播窗打开期间，防止悬浮球遮挡演播视线）。 |
 | **`ShowWindow`** | `GET` | 后端 $\to$ FCB | `null` | 恢复显示悬浮球，并调用 Win32 刷新置顶状态。 |
 | **`ApplyNewProp`** | `GET` | 后端 $\to$ FCB | `FloatingButtonConfig` | 外观属性热更新。实时重新计算几何弧形、缩放比例、边框色与图标。 |
+| **`ApplyDefaultPickCount`** | `GET` | 后端 $\to$ FCB | `int` | 热更新人数选择器的默认抽取人数，范围由后端配置规范化为 1-10。 |
 | **`MoveNewPosition`** | `GET` | 后端 $\to$ FCB | `FcbPositionPayload` | 主动移动悬浮按钮到目标屏幕坐标并进行边界校正。 |
 | **`Destroy`** | `DEST` | 后端 $\to$ FCB | `null` | 关闭悬浮按钮窗口并释放线程。 |
 
@@ -130,7 +131,6 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
 | :--- | :---: | :---: | :--- | :--- |
 | **`ShowWindow`** | `GET` | 后端 $\to$ FRW | `FrwShowPayload` | 后端抽卡算法完成后下发。包含 `Amount` 和 `CalledStudents` 列表。FRW 淡入全屏遮罩、播放音效与 BGM、执行 15° 卡片倾斜与姓名逐个飞入弹跳动效。 |
-| **`CloseWindow`** | `GET` | 后端 $\to$ FRW | `null` | 主动指令平滑淡出并关闭演播窗口。 |
 | **`WindowClosed`** | `POST` | FRW $\to$ 后端 | `List<CalledStudent>` | 演播窗口完成退场动画后上报本轮名单。后端缓存为“上一次抽取结果”，重置 `IsDrawing = false`，下发 `ShowWindow` 唤醒桌面悬浮球，并在开启结果暂留时显示 LRW。 |
 | **`ApplyNewProp`** | `GET` | 后端 $\to$ FRW | `PickResultDialogConfig` | 热更新演播窗外观、背景半透明度与音量配置。 |
 | **`Destroy`** | `DEST` | 后端 $\to$ FRW | `null` | 停止所有音视频播放，销毁演播窗口并释放线程。 |
@@ -139,9 +139,9 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 
 | 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
 | :--- | :---: | :---: | :--- | :--- |
-| **`ShowWindow`** | `GET` | 后端 $\to$ LRW | `LrwShowPayload` | 抽取演播结束且 `pickResultDialog.showLastResult = true` 时下发。窗口固定显示在主屏工作区右上角（16 DIP 边距），列出本轮学生与信封品阶。 |
-| **`HideWindow`** | `GET` | 后端 $\to$ LRW | `null` | 新抽取开始时、或关闭 `showLastResult` 开关时下发，淡出隐藏暂留浮窗。 |
-| **`ApplyNewProp`** | `GET` | 后端 $\to$ LRW | `PickResultDialogConfig` | 同步暂留浮窗的背景色、边框色、不透明度与自动关闭时长。 |
+| **`ShowWindow`** | `GET` | 后端 $\to$ LRW | `LrwShowPayload` | 抽取演播结束且 `pickResultDialog.showLastResult = true` 时下发。窗口固定显示在主屏工作区右上角，卡片从屏幕右缘滑入，列出本轮学生与信封品阶。 |
+| **`HideWindow`** | `GET` | 后端 $\to$ LRW | `null` | 新抽取开始时、或关闭 `showLastResult` 开关时下发，向右滑出隐藏暂留浮窗。 |
+| **`ApplyNewProp`** | `GET` | 后端 $\to$ LRW | `PickResultDialogConfig` | 同步暂留浮窗的背景色、边框色、不透明度与自动关闭时长（不透明度同时作用于卡片内的姓名片、徽标与进度条）。 |
 | **`Destroy`** | `DEST` | 后端 $\to$ LRW | `null` | 关闭窗口并结束 LRW 线程消息循环。 |
 
 > LRW 的关闭按钮仅隐藏窗口（不影响配置开关），下一次抽取结束后会再次自动显示。
@@ -151,7 +151,7 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
 | :--- | :---: | :---: | :--- | :--- |
 | **`ShowConfigPanel`** | `GET` | 后端 $\to$ CP | `null` | 托盘菜单点击“配置”时下发。将配置窗口取消最小化/隐藏状态，显示并激活到最前台。 |
-| **`ConfigSaved`** | `POST` | CP $\to$ 后端 | `string` (YAML 文本) | 前端点击“应用”时上报。后端执行 YAML 反序列化校验、班级名单同步、写盘持久化、更新 `ConfigCache`，并广播 `ApplyNewProp` 给 FCB 与 FRW。 |
+| **`ConfigSaved`** | `POST` | CP $\to$ 后端 | `string` (YAML 文本) | 前端点击“应用”时上报。后端执行 YAML 反序列化校验、班级名单同步、写盘持久化、更新 `ConfigCache`，并广播 `ApplyNewProp` 与 `ApplyDefaultPickCount` 给 FCB。 |
 | **`OverwriteConfig`** | `GET` | 后端 $\to$ CP | `string` (YAML 文本) | 保存校验失败时回滚覆写，或后端主动向前端同步最新配置。 |
 | **`Destroy`** | `DEST` | 后端 $\to$ CP | `null` | 销毁配置面板窗口及 WebView2 运行时。 |
 
@@ -209,12 +209,6 @@ public class NativeBridge
     // 删除指定班级
     public bool DeleteClass(string classId);
 
-    // 读取指定班级的详细配置 (包含完整的学员名单与权重，返回 JSON 字符串)
-    public string LoadClassJson(string classId);
-
-    // 保存班级配置 JSON 文本到 classes/<classId>.yaml
-    public bool SaveClassJson(string json);
-
     // ==================== 3. 自定义资源库 (customs/) ====================
     // 保存自定义资源 (图标、音效、BGM)，写入 customs/custom_<id>.yaml
     public string SaveCustomResource(string fileName, string mimeType, string purpose, string base64, double duration);
@@ -224,9 +218,6 @@ public class NativeBridge
 
     // 删除指定自定义资源
     public bool DeleteCustomResource(string customId);
-
-    // 获取资源的 Data URL (如 data:image/png;base64,...)
-    public string GetCustomDataUrl(string customId);
 
     // ==================== 4. 系统特权与外部操作 ====================
     // 弹出 Windows 原生文件选择对话框 (支持传入自定义文件过滤器)
@@ -320,8 +311,6 @@ public class NativeBridge
 | **`createClass(name)`** | `name: string` | `Promise<{ ok: boolean, class: ClassItem }>` | `CreateClass(name)` | 创建新班级名单。 |
 | **`renameClass(id, name)`** | `id: string, name: string` | `Promise<{ ok: boolean, message: string }>` | `RenameClass(id, name)` | 重命名班级。 |
 | **`deleteClass(id)`** | `id: string` | `Promise<{ ok: boolean, message: string }>` | `DeleteClass(id)` | 删除班级名单。 |
-| **`loadClass(id)`** | `id: string` | `Promise<ClassItem\|null>` | `LoadClassJson(id)` | 加载指定班级完整学员数据。 |
-| **`saveClass(cls)`** | `cls: ClassItem` | `Promise<{ ok: boolean }>` | `SaveClassJson(json)` | 保存班级名单数据。 |
 | **`saveCustom(payload)`** | `{ fileName, mimeType, purpose, base64, duration }` | `Promise<{ ok: boolean, id: string, ... }>` | `SaveCustomResource(...)` | 保存自定义资源素材（图标、音效、BGM）。 |
 | **`getCustom(id)`** | `id: string` | `Promise<CustomItem\|null>` | `GetCustomResourceJson(id)` | 加载指定资源元数据与 Base64。 |
 | **`deleteCustom(id)`** | `id: string` | `Promise<{ ok: boolean }>` | `DeleteCustomResource(id)` | 删除指定自定义素材。 |
@@ -397,7 +386,7 @@ sequenceDiagram
         Scheduler->>Bus: GET @FCB.HideWindow()
         Bus->>FCB: 隐藏桌面悬浮按钮
         Scheduler->>Bus: GET @LRW.HideWindow()
-        Bus->>LRW: 暂时隐藏上一次的结果暂留浮窗
+        Bus->>LRW: 暂时隐藏上一次的结果暂留浮窗（向右滑出）
 
         Scheduler->>Engine: LotteryEngine.Pick(StudentList, N, AllowRepeatDraw)
         Engine-->>Scheduler: 返回抽卡结果 (List<CalledStudent>, 包含信封颜色品质)
@@ -419,7 +408,7 @@ sequenceDiagram
 
         opt pickResultDialog.showLastResult == true
             Scheduler->>Bus: GET @LRW.ShowWindow(LrwShowPayload)
-            Bus->>LRW: 在屏幕右上角显示本轮结果
+            Bus->>LRW: 在屏幕右上角从右缘滑入显示本轮结果
         end
     end
 ```
@@ -454,9 +443,13 @@ sequenceDiagram
         
         Scheduler->>Bus: 5. 广播 GET @FCB.ApplyNewProp(ConfigCache.GetFCBProps())
         Bus->>FCB: 热更新悬浮按钮尺寸、边框、透明度与图标
-        
+        Scheduler->>Bus: 5.1 广播 GET @FCB.ApplyDefaultPickCount(defaultCount)
+        Bus->>FCB: 热更新人数选择器默认抽取人数
+
         Scheduler->>Bus: 6. 广播 GET @FRW.ApplyNewProp(ConfigCache.GetFRWProps())
         Bus->>FRW: 热更新演播窗音量与背景样式
+
+        Scheduler->>Scheduler: 7. 刷新结果暂留浮窗 (RefreshLastResultWindow)
         
         Scheduler-->>Bridge: return true
         Bridge-->>Vue: 返回 { ok: true, message: "配置已保存" }
@@ -552,8 +545,8 @@ public sealed class LrwShowPayload
 ### 7.4 `AppInfo` JSON 结构
 ```json
 {
-  "version": "26.10.02",
-  "codename": "Shiroko",
+  "version": "26.10.04",
+  "codename": "Midori",
   "isAdmin": false,
   "isUiAccess": false,
   "uiAccessDllExists": true,

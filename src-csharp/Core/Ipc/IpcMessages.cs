@@ -84,14 +84,6 @@ public class IpcMessage
 //  具体命令 Payload 强类型包装
 // ============================================================================
 
-public class FcbInitPayload
-{
-    public FloatingButtonConfig Props { get; set; } = new();
-    public int MonitorNumber { get; set; }
-    public int? PositionX { get; set; }
-    public int? PositionY { get; set; }
-}
-
 public class FcbPositionPayload
 {
     public int MonitorNumber { get; set; }

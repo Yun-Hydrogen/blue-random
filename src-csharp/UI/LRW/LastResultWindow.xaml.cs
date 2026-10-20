@@ -24,19 +24,23 @@ namespace BlueRandom.UI.LRW;
 /// </summary>
 public partial class LastResultWindow : Window
 {
-    /// <summary>用于取消过期的淡出动画，避免"隐藏→立即显示"时被旧的 Completed 回调误隐藏。</summary>
+    /// <summary>卡片从屏幕右缘滑入/滑出的水平位移量，需大于卡片宽度以完全移出窗口。</summary>
+    private const double SlideDistance = 400;
+
+    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>用于取消过期的滑出动画，避免"隐藏→立即显示"时被旧的 Completed 回调误隐藏。</summary>
     private int _hideVersion;
 
-    private readonly DispatcherTimer _autoCloseTimer;
+    /// <summary>用于取消过期的自动关闭动画，避免旧进度条结束时误触发隐藏。</summary>
+    private int _autoCloseVersion;
+
     private int _autoCloseSeconds;
-    private int _remainingSeconds;
 
     public LastResultWindow()
     {
         InitializeComponent();
-
-        _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _autoCloseTimer.Tick += OnAutoCloseTick;
 
         FontFamily = ResourceCache.CustomFont;
         IpcBroker.Subscribe(IpcModule.Lrw, OnIpcMessageReceived);
@@ -98,9 +102,11 @@ public partial class LastResultWindow : Window
 
             PositionTopRight();
 
-            BeginAnimation(OpacityProperty, null);
-            Opacity = 1;
-            if (!IsVisible) Show();
+            if (!IsVisible)
+            {
+                ResetSlide();
+                Show();
+            }
             PlayEnterAnimation();
             StartAutoClose(_autoCloseSeconds);
 
@@ -112,46 +118,68 @@ public partial class LastResultWindow : Window
         }
     }
 
-    /// <summary>固定贴主屏工作区右上角，留出 16 DIP 边距。</summary>
+    /// <summary>固定贴主屏工作区右上角，卡片右缘距屏幕 20 DIP。</summary>
     private void PositionTopRight()
     {
         var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - Width - 16;
-        Top = workArea.Top + 16;
+        Left = workArea.Right - Width;
+        Top = workArea.Top;
     }
 
+    /// <summary>
+    /// 从屏幕右缘滑入：从当前位移（首次显示时为 <see cref="SlideDistance"/>）插值到 0。
+    /// 卡片已在位时直接返回，避免配置热更新重播入场动画造成闪烁。
+    /// </summary>
     private void PlayEnterAnimation()
     {
-        Opacity = 0;
-        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
-        SlideTransform.Y = -8;
+        double start = SlideTransform.X;
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.X = start;
+
+        if (start <= 0.5) return;
 
         var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = easing });
-        SlideTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = easing });
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(start, 0, EnterDuration) { EasingFunction = easing });
+    }
+
+    /// <summary>把卡片复位到窗口右缘外侧，保证下一次显示一定从屏幕外开始滑入。</summary>
+    private void ResetSlide()
+    {
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.X = SlideDistance;
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => HideWindow();
 
-    /// <summary>淡出并隐藏窗口；下次抽取结束后会再次自动显示。</summary>
+    /// <summary>向右滑出并隐藏窗口；下次抽取结束后会再次自动滑入显示。</summary>
     private void HideWindow()
     {
         StopAutoClose();
+        HideProgress();
 
-        if (!IsVisible) return;
+        if (!IsVisible)
+        {
+            ResetSlide();
+            return;
+        }
 
         int version = ++_hideVersion;
-        var fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(120));
-        fade.Completed += (_, _) =>
+
+        // 从当前实际位移开始滑出，避免中途被打断时（如入场动画未完）出现跳帧
+        double current = SlideTransform.X;
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.X = current;
+
+        var easing = new CubicEase { EasingMode = EasingMode.EaseIn };
+        var slide = new DoubleAnimation(current, SlideDistance, ExitDuration) { EasingFunction = easing };
+        slide.Completed += (_, _) =>
         {
             if (version != _hideVersion) return;
             Hide();
-            BeginAnimation(OpacityProperty, null);
-            Opacity = 1;
+            ResetSlide();
         };
-        BeginAnimation(OpacityProperty, fade);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, slide);
     }
 
     /// <summary>套用暂留浮窗独立的背景色、边框色、不透明度与自动关闭时长。</summary>
@@ -159,73 +187,71 @@ public partial class LastResultWindow : Window
     {
         if (props == null) return;
 
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(props.LastResultBorderColor))
-            {
-                var border = (Color)ColorConverter.ConvertFromString(props.LastResultBorderColor);
-                RootCard.BorderBrush = new SolidColorBrush(border);
-            }
+        var palette = LrwVisualTheme.Compute(
+            props.LastResultBgColor, props.LastResultBorderColor, props.LastResultOpacity);
 
-            if (!string.IsNullOrWhiteSpace(props.LastResultBgColor))
-            {
-                var bg = (Color)ColorConverter.ConvertFromString(props.LastResultBgColor);
-                bg.A = (byte)Math.Round(Math.Clamp(props.LastResultOpacity, 0.0, 1.0) * 255);
-                RootCard.Background = new SolidColorBrush(bg);
-            }
-        }
-        catch
-        {
-            // 非法颜色字符串保持默认样式
-        }
+        RootCard.Background = BrushOf(palette.CardBackground);
+
+        // 卡片内的姓名片、徽标、进度条都使用与整张卡片相同的不透明度：
+        // 颜色向强调色轻混合保持层级感，透明度跟随配置，避免半透明卡片里残留实心白块。
+        Resources["AccentBrush"] = BrushOf(palette.Accent);
+        Resources["RowBackgroundBrush"] = BrushOf(palette.RowBackground);
+        Resources["BadgeBackgroundBrush"] = BrushOf(palette.BadgeBackground);
+        Resources["CloseHoverBrush"] = BrushOf(palette.CloseHover);
+        Resources["ProgressTrackBrush"] = BrushOf(palette.ProgressTrack);
 
         _autoCloseSeconds = Math.Max(0, props.LastResultAutoCloseSeconds);
         if (IsVisible) StartAutoClose(_autoCloseSeconds);
     }
 
+    /// <summary>把 0xAARRGGBB 转成冻结的纯色画刷。</summary>
+    private static SolidColorBrush BrushOf(uint argb)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(
+            (byte)((argb >> 24) & 0xFF),
+            (byte)((argb >> 16) & 0xFF),
+            (byte)((argb >> 8) & 0xFF),
+            (byte)(argb & 0xFF)));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>启动自动关闭进度条；0 秒表示不自动关闭，此时进度条隐藏。</summary>
     private void StartAutoClose(int seconds)
     {
-        _autoCloseTimer.Stop();
-        _autoCloseSeconds = Math.Max(0, seconds);
-        _remainingSeconds = _autoCloseSeconds;
+        StopAutoClose();
 
+        _autoCloseSeconds = Math.Max(0, seconds);
         if (_autoCloseSeconds <= 0)
         {
-            CountdownText.Text = string.Empty;
-            CountdownText.Visibility = Visibility.Collapsed;
+            HideProgress();
             return;
         }
 
-        CountdownText.Visibility = Visibility.Visible;
-        UpdateCountdownText();
-        _autoCloseTimer.Start();
+        ProgressHost.Visibility = Visibility.Visible;
+
+        int version = ++_autoCloseVersion;
+        var shrink = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(_autoCloseSeconds));
+        shrink.Completed += (_, _) =>
+        {
+            if (version != _autoCloseVersion) return;
+            HideWindow();
+        };
+
+        ProgressScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
     }
 
+    /// <summary>停止进度条动画并复位，避免旧的 Completed 回调触发隐藏。</summary>
     private void StopAutoClose()
     {
-        _autoCloseTimer.Stop();
-        _remainingSeconds = 0;
-        CountdownText.Text = string.Empty;
-        CountdownText.Visibility = Visibility.Collapsed;
+        _autoCloseVersion++;
+        ProgressScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        ProgressScale.ScaleX = 1;
     }
 
-    private void OnAutoCloseTick(object? sender, EventArgs e)
+    private void HideProgress()
     {
-        if (_remainingSeconds <= 1)
-        {
-            StopAutoClose();
-            HideWindow();
-            return;
-        }
-
-        _remainingSeconds--;
-        UpdateCountdownText();
-    }
-
-    private void UpdateCountdownText()
-    {
-        if (_autoCloseSeconds <= 0) return;
-        CountdownText.Text = $"{Math.Max(0, _remainingSeconds)} 秒后自动关闭";
+        ProgressHost.Visibility = Visibility.Collapsed;
     }
 
     private static List<LastResultRow> BuildRows(IReadOnlyList<CalledStudent> students)

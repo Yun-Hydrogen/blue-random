@@ -491,10 +491,6 @@ public sealed class DCompResultWindow
                 }
                 break;
 
-            case "CloseWindow":
-                Dismiss();
-                break;
-
             case "Destroy":
                 PostQuitMessage(0);
                 break;

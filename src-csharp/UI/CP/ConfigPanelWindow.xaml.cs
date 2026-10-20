@@ -81,7 +81,7 @@ public partial class ConfigPanelWindow : Window
 
     private async Task InitializeWebViewCoreAsync()
     {
-        var env = await WebViewEnvironmentManager.GetEnvironmentAsync();
+        var env = await WebViewEnvironmentManager.GetCpEnvironmentAsync();
         await WebViewControl.EnsureCoreWebView2Async(env);
 
             // 彻底清除并全局禁用 WebView2 HTTP 磁盘/内存/Storage 缓存 (防前端改动因缓存不生效)

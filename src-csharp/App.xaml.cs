@@ -62,12 +62,6 @@ public partial class App : Application
             return;
         }
 
-        // 技术原型：DirectComposition 透明窗口（环境变量 BLUERANDOM_DCOMP_PROBE=1 时启用）
-        if (Environment.GetEnvironmentVariable("BLUERANDOM_DCOMP_PROBE") == "1")
-        {
-            BlueRandom.UI.FRW.DCompProbe.Start();
-        }
-
         // 实例化原生启动器窗口
         var splash = new SplashWindow();
         splash.Show();

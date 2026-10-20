@@ -33,12 +33,11 @@ public static class WindowManager
     /// <summary>
     /// 并发拉起悬浮球 (FCB)、结果浮窗 (FRW)、结果暂留浮窗 (LRW) 与配置面板 (CP) 的独立 STA UI 线程，并启动系统托盘监听。
     /// <para>
-    /// 架构隔离与线程安全优势（2026-10-17 更新）：
+    /// 架构隔离与线程安全优势：
     /// 1. FCB 线程专职监听鼠标拖拽与 60FPS 呼吸/旋转动画，不受任何复杂渲染或 Chromium 引擎阻塞；
-    /// 2. FRW 线程独立承载结果浮窗的 WebView2（独立环境 + 独立 userDataFolder = 独立 Web 进程），
-    ///    与 CP 彻底隔离，避免配置面板的清缓存/DevTools/后台节流影响招募动画与音频；
-    /// 3. CP 线程承载配置面板的 WebView2（共享 EBWebView 目录）；
-    /// 4. 严格遵守 COM 单线程套间 (STA) 规则，每个 CoreWebView2Environment 只在其所属线程调度，
+    /// 2. FRW 线程承载 DirectComposition 原生结果窗（DCompResultWindow），自有 Win32 消息循环；
+    /// 3. CP 线程是唯一承载 WebView2 的 UI 线程（EBWebView 目录）；
+    /// 4. 严格遵守 COM 单线程套间 (STA) 规则，CoreWebView2Environment 只在其所属线程调度，
     ///    根除 0x80010106 / InvalidOperationException 与 userDataFolder 互斥锁冲突；
     /// 5. CP 启动时不预热（首次打开时初始化）；FRW 仅通过 EnsureHandle 建立 Win32 HWND，
     ///    绝不调用 Show()，杜绝界面闪烁。

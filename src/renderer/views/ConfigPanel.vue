@@ -86,7 +86,7 @@
   组件         | Props                                    | Emits
   -------------|------------------------------------------|------------------------------
   TabRoster    | studentList, allowRepeatDraw             | update:studentList, update:allowRepeatDraw, chip-hover, chip-leave
-  TabFloating  | fb (floatingButton 配置对象)              | update:fb
+  TabFloating  | fb (floatingButton), pickCount (抽取人数) | update:fb, update:pickCount
   TabResult    | pickResult (pickResultDialog 配置对象)    | update:pickResult
   TabAdvanced  | admin, appInfo, updateLoading/Status/Title/Detail | update:admin + 7 个操作事件
   TabAbout     | appInfo                                  | （无，纯展示组件）
@@ -211,7 +211,9 @@
         <TabFloating
           v-show="activeTab === 'floating'"
           :fb="draft.floatingButton"
+          :pick-count="draft.pickCountDialog"
           @update:fb="draft.floatingButton = $event"
+          @update:pickCount="draft.pickCountDialog = $event"
         />
         <TabResult
           v-show="activeTab === 'result'"
@@ -347,13 +349,15 @@
  *
  *  如需修改业务逻辑，请编辑 src/renderer/composables/useConfigPanel.js。
  */
+import { computed, ref, defineAsyncComponent } from 'vue'
 import TabRoster   from './TabRoster.vue'
 import TabFloating from './TabFloating.vue'
 import TabResult   from './TabResult.vue'
-import TabAdvanced from './TabAdvanced.vue'
-import TabAbout    from './TabAbout.vue'
-import TabLogs     from './TabLogs.vue'
-import { computed, ref } from 'vue'
+
+const TabAdvanced = defineAsyncComponent(() => import('./TabAdvanced.vue'))
+const TabAbout    = defineAsyncComponent(() => import('./TabAbout.vue'))
+const TabLogs     = defineAsyncComponent(() => import('./TabLogs.vue'))
+
 import { rizui_toast, rizui_card, rizui_text, rizui_button, rizui_dialog } from 'riz-ui'
 import { useConfigPanel } from '../composables/useConfigPanel.js'
 

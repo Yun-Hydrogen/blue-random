@@ -7,14 +7,13 @@
 ================================================================================
   一、功能概述
 ================================================================================
-  配置抽取结果浮窗的外观、音效及联动功能。包含四张卡片：
+  配置抽取结果浮窗的外观与音效。包含三张卡片：
 
     卡片         | 功能
     ─────────────┼──────────────────────────────────────────
     浮窗外观     | 背景/边框颜色、透明度、装饰角色显示开关
     结果暂留浮窗 | 抽取结束后在屏幕右上角保留本次结果，可手动关闭
     音效控制     | 抽取音效开关与音量；背景音乐上传（customs）与开关/音量/起始位置/淡入淡出
-    联动         | ClassIsland 播报（暂未实现，notReady 遮罩）
 
   数据流：父组件 ConfigPanel 通过 :pickResult 传入配置对象，
           本组件通过 $emit('update:pickResult', ...) 上报修改。
@@ -31,7 +30,7 @@
 ================================================================================
   三、依赖
 ================================================================================
-  riz-ui 组件：rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button, NotReadyOverlay
+  riz-ui 组件：rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button
   Vue API：computed, ref, watch, onMounted, onBeforeUnmount
 
 ================================================================================
@@ -43,7 +42,7 @@
     - 配置：pickResultDialog.bgmCustomId 只存引用，不内嵌音频数据
     - 时间轴：max 跟随音乐实际时长（bgmDuration），起始位置超限自动回退 0
     - 未上传 BGM 时：播放开关/音量/起始位置/淡入淡出全部禁用，并提示先上传
-    - 播放：PickResult.vue 通过 pick-result:get-config 由主进程解析为 bgmDataUrl
+    - 播放：DCompResultWindow 从 ConfigCache 读取 custom id，经 CustomsStore 解析为音频数据
 
 ================================================================================
   五、更新记录
@@ -113,16 +112,16 @@
           @update:model-value="$emit('update:pickResult',{...pickResult,lastResultOpacity:$event/100})"
         />
       </rizui_cfgrow>
-      <rizui_cfgrow label="自动关闭时长" hint="0 表示不自动关闭；大于 0 时浮窗底部显示倒计时" :disabled="!pickResult.showLastResult">
+      <rizui_cfgrow label="自动关闭时长" hint="0 表示不自动关闭；大于 0 时浮窗底部显示随时间收缩的进度条" :disabled="!pickResult.showLastResult">
         <rizui_slider
           :model-value="pickResult.lastResultAutoCloseSeconds ?? 0"
-          :min="0" :max="300" :step="5"
+          :min="0" :max="100" :step="1"
           :color="tabTheme"
           :display-value="autoCloseDisplay"
           @update:model-value="$emit('update:pickResult',{...pickResult,lastResultAutoCloseSeconds:$event})"
         />
       </rizui_cfgrow>
-      <rizui_infobox text="暂留浮窗会在下一次抽取开始时自动隐藏，抽取结束后重新显示；关闭开关会立即隐藏浮窗。自动关闭倒计时从每次显示时开始计算。" />
+      <rizui_infobox text="暂留浮窗会在下一次抽取开始时自动隐藏，抽取结束后从屏幕右缘滑入重新显示；关闭开关会立即滑出隐藏。自动关闭进度条从每次显示时开始计时。" />
     </rizui_card>
 
     <!--
@@ -184,18 +183,6 @@
         <rizui_slider :model-value="pickResult.bgmFadeDuration || 1.5" :min="0.5" :max="5" :step="0.1" :color="tabTheme" :display-value="(pickResult.bgmFadeDuration || 1.5).toFixed(1) + 's'" @update:model-value="$emit('update:pickResult',{...pickResult,bgmFadeDuration:$event})" />
       </rizui_cfgrow>
     </rizui_card>
-
-    <!--
-      四、联动
-      与其他桌面软件的集成功能
-    -->
-    <rizui_card title="联动" desc="与其他软件的联动功能" icon="fa-solid fa-link">
-      <!-- notReady：功能未实现，遮罩自动覆盖（rizui_cfgrow 无 notReady 属性，手动叠加遮罩） -->
-      <rizui_cfgrow label="ClassIsland 联动播报" hint="将抽取结果播报到 ClassIsland" stack style="position: relative; overflow: hidden;">
-        <rizui_switch :model-value="false" :color="tabTheme" disabled />
-        <NotReadyOverlay text="等待实现" />
-      </rizui_cfgrow>
-    </rizui_card>
   </div>
 </template>
 
@@ -208,7 +195,7 @@
  *  4. formatTime        — 秒数 → MM:SS 格式化
  */
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button, NotReadyOverlay, rizui_infobox } from 'riz-ui'
+import { rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button, rizui_infobox } from 'riz-ui'
 import { resolveAssetUrl } from '@/utils/asset'
 
 const props = defineProps({ pickResult: Object })

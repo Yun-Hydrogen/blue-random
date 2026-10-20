@@ -5,9 +5,10 @@
 
   功能概述：
     1. 按钮样式   —— 大小百分比 / 屏幕位置 X,Y / 持续置顶开关
-    2. 中心图标   —— 文件选择器（上传到 customs/ 目录）+ 圆形预览 + 图标尺寸滑条
-    3. 边框颜色   —— rizui_colorpicker 组件（HSL 调色盘 Dialog）
-    4. 滑条填充   —— rizui_slider 组件自动处理轨道渐变
+    2. 抽取人数   —— 默认打开人数（1-10 人）
+    3. 中心图标   —— 文件选择器（上传到 customs/ 目录）+ 圆形预览 + 图标尺寸滑条
+    4. 边框颜色   —— rizui_colorpicker 组件（HSL 调色盘 Dialog）
+    5. 滑条填充   —— rizui_slider 组件自动处理轨道渐变
 
   数据流：
     父组件 ConfigPanel 持有 draft.floatingButton 对象
@@ -45,6 +46,18 @@
   <div class="tab-page floating-tab">
     <!-- 一、按钮样式 -->
     <rizui_card title="行为" desc="调整悬浮按钮的行为" icon="fa-solid fa-toggle-on">
+
+      <rizui_cfgrow label="默认抽取人数" hint="打开悬浮按钮人数选择器时预先选中的人数，范围为 1-10 人">
+        <rizui_slider
+          :model-value="pickCount.defaultCount ?? 1"
+          :min="1"
+          :max="10"
+          :step="1"
+          :color="tabTheme"
+          display="人"
+          @update:model-value="$emit('update:pickCount',{...pickCount,defaultCount:$event})"
+        />
+      </rizui_cfgrow>
 
       <rizui_cfgrow label="位置 X / Y" hint="实时显示悬浮按钮当前位置，可直接编辑；在配置面板中“应用”时随配置一起保存">
         <div class="cfg-xy-group">
@@ -133,14 +146,21 @@ const tabTheme = '#39c5bb'
  *    iconSize      (number)  图标显示尺寸(px)，默认 48
  *    borderColor   (string)  边框颜色，默认 '#ffffff'
  */
-const props = defineProps({ fb: Object })
+const props = defineProps({
+  fb: Object,
+  pickCount: {
+    type: Object,
+    default: () => ({ defaultCount: 1 })
+  }
+})
 
 /*
  *  emit：向父组件发送数据变更事件
  *  update:fb —— 悬浮按钮配置发生变化
+ *  update:pickCount —— 默认抽取人数配置发生变化
  *  注意：必须传递完整的新对象（用扩展运算符创建），不能直接修改 props.fb 的属性
  */
-const emit = defineEmits(['update:fb'])
+const emit = defineEmits(['update:fb', 'update:pickCount'])
 
 /* 悬浮按钮位置：默认实时跟随（主进程轮询）；用户编辑后以手动值为准 */
 const userEditedPosition = ref(false)

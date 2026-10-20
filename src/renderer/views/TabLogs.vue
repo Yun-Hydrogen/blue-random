@@ -30,7 +30,7 @@
         <span class="log-head-title">运行日志</span>
         <span class="log-badge log-badge-admin" v-if="appInfo.isAdmin">管理员</span>
         <span class="log-badge log-badge-uia" v-if="appInfo.isUiAccess">UIAccess</span>
-        <span class="log-badge log-badge-ver">v{{ appInfo.version || pkg.version }}</span>
+        <span class="log-badge log-badge-ver">v{{ appInfo.version || pkgVersion }}</span>
         <div class="log-head-spacer"></div>
         <button class="log-clear-btn" @click="clearLogs" :disabled="!isLoaded">清空</button>
       </div>
@@ -68,7 +68,7 @@
 
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import pkg from '../../../package.json'
+import { version as pkgVersion } from '../../../package.json'
 import { rizui_button } from 'riz-ui'
 
 defineProps({

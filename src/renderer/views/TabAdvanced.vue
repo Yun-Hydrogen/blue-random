@@ -298,9 +298,7 @@ const props = defineProps({
    * admin — 高级设置对象
    * 包含管理员权限、计划任务、UIAccess 等高级配置
    * 常用字段：adminAutoStartPath, adminAutoStartTaskName,
-   *           adminAutoStartAdmin, uiAccessEnabled,
-   *           renderingBackend, disableDirectComposition,
-   *           disableHardwareAcceleration
+   *           adminAutoStartAdmin, uiAccessEnabled, requireAdminOnLaunch
    */
   admin: Object,
 
@@ -425,12 +423,7 @@ const adminAutoStartTaskName = computed({
  *
  * 执行流程：
  *   1. 关闭 Dialog（showResetDialog.value = false）
- *   2. emit('reset-config') → 父组件收到后执行实际重置逻辑（TODO）
- *
- * 注意：
- *   - 当前父组件的重置逻辑尚未实现（标记 TODO），emit 后仅关闭对话框。
- *   - 不要在此函数中直接修改 props.admin，
- *     重置逻辑应由父组件统一处理。
+ *   2. emit('reset-config') → 父组件收到后调用后端全量重置配置
  */
 
 /* showResetDialog — 控制重置确认对话框的显示/隐藏 */

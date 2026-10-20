@@ -98,6 +98,11 @@ public class NativeBridge
             ClassManagerService.EnsureInitialized(cfg);
             ConfigCache.Current = YamlConfigService.Normalize(cfg);
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyNewProp", ConfigCache.GetFCBProps()));
+            IpcBroker.Send(IpcMessage.Create(
+                IpcAction.Get,
+                IpcModule.Fcb,
+                "ApplyDefaultPickCount",
+                ConfigCache.Current.PickCountDialog.DefaultCount));
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyNewProp", ConfigCache.GetFRWProps()));
             BackendScheduler.RefreshLastResultWindow();
         }
@@ -190,36 +195,6 @@ public class NativeBridge
         return ok;
     }
 
-    /// <summary>
-    /// 加载指定班级的完整配置 JSON（包含学生花名册与抽取权重）。
-    /// </summary>
-    /// <param name="classId">班级唯一 ID。</param>
-    /// <returns>班级实体 JSON 字符串；若不存在则返回 "null"。</returns>
-    public string LoadClassJson(string classId)
-    {
-        var cls = ClassManagerService.LoadClass(classId);
-        return cls != null ? JsonSerializer.Serialize(cls, JsonOptions) : "null";
-    }
-
-    /// <summary>
-    /// 反序列化并保存班级完整配置到对应独立的 class_*.json 文件中。
-    /// </summary>
-    /// <param name="json">前端传递的 ClassConfig JSON 字符串。</param>
-    /// <returns>保存成功返回 true，失败返回 false。</returns>
-    public bool SaveClassJson(string json)
-    {
-        try
-        {
-            var cls = JsonSerializer.Deserialize<ClassConfig>(json, JsonOptions);
-            return cls != null && ClassManagerService.SaveClass(cls);
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Error("NativeBridge", "保存班级 JSON 异常", ex);
-            return false;
-        }
-    }
-
     // ========================================================================
     //  3. 自定义资源 (customs/)
     // ========================================================================
@@ -258,16 +233,6 @@ public class NativeBridge
     public bool DeleteCustomResource(string customId)
     {
         return CustomsStore.DeleteCustom(customId);
-    }
-
-    /// <summary>
-    /// 将自定义资源读取并打包转换为可直接在 HTML 渲染的 Base64 Data URL。
-    /// </summary>
-    /// <param name="customId">资源唯一 ID。</param>
-    /// <returns>格式如 "data:image/png;base64,..." 的字符串；失败返回空串。</returns>
-    public string GetCustomDataUrl(string customId)
-    {
-        return CustomsStore.GetDataUrl(customId) ?? string.Empty;
     }
 
     // ========================================================================
@@ -604,82 +569,5 @@ public class NativeBridge
             AppLogger.Warn("WebUI", message);
         else
             AppLogger.Info("WebUI", message);
-    }
-
-    // ========================================================================
-    //  8. 抽卡结果浮窗 (PickResult) 专用互操作
-    // ========================================================================
-
-    /// <summary>
-    /// 获取当前抽卡结果浮窗的个性化配置（包含颜色、透明度、立绘开关与自定义音效/BGM 的 Data URL）。
-    /// </summary>
-    /// <returns>JSON 序列化后的配置对象。</returns>
-    public string GetPickResultConfigJson()
-    {
-        var props = ConfigCache.GetFRWProps();
-        string gachaSoundDataUrl = "";
-        if (!string.IsNullOrEmpty(props.GachaSoundCustomId))
-        {
-            var custom = CustomsStore.LoadCustom(props.GachaSoundCustomId);
-            if (custom != null && !string.IsNullOrEmpty(custom.Base64))
-            {
-                string mime = custom.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? "audio/wav" : "audio/mpeg";
-                gachaSoundDataUrl = $"data:{mime};base64,{custom.Base64}";
-            }
-        }
-        string bgmDataUrl = "";
-        if (props.PlayMusic && !string.IsNullOrEmpty(props.BgmCustomId))
-        {
-            var custom = CustomsStore.LoadCustom(props.BgmCustomId);
-            if (custom != null && !string.IsNullOrEmpty(custom.Base64))
-            {
-                string mime = custom.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ? "audio/wav" : "audio/mpeg";
-                bgmDataUrl = $"data:{mime};base64,{custom.Base64}";
-            }
-        }
-
-        var dto = new
-        {
-            defaultPlayGachaSound = props.DefaultPlayGachaSound,
-            soundVolume = props.SoundVolume,
-            gachaSoundDataUrl = gachaSoundDataUrl,
-            playMusic = props.PlayMusic,
-            musicVolume = props.MusicVolume,
-            bgmStartTime = props.BgmStartTime,
-            bgmFadeDuration = props.BgmFadeDuration,
-            bgmDataUrl = bgmDataUrl,
-            panelOpacity = props.PanelOpacity,
-            panelBgColor = props.PanelBgColor,
-            panelBorderColor = props.PanelBorderColor
-        };
-        return JsonSerializer.Serialize(dto, JsonOptions);
-    }
-
-    /// <summary>
-    /// 获取上一轮或当前缓存在浮窗宿主中的抽取学生名单。
-    /// </summary>
-    /// <returns>JSON 序列化学生列表。</returns>
-    public string GetLastResultsJson()
-    {
-        return JsonSerializer.Serialize(BackendScheduler.LastResults, JsonOptions);
-    }
-
-    /// <summary>
-    /// 关闭抽卡结果浮窗，隐去窗口并上报 WindowClosed 事件。
-    /// </summary>
-    public void ClosePickResult()
-    {
-        _hostWindow.Dispatcher.Invoke(() =>
-        {
-            if (_hostWindow is BlueRandom.UI.FRW.ResultWindow frw)
-            {
-                frw.Dismiss();
-            }
-            else
-            {
-                _hostWindow.Hide();
-                IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Frw, "WindowClosed"));
-            }
-        });
     }
 }

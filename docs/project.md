@@ -37,7 +37,6 @@
 ├── .SHA256          管理员密码哈希（启用密码锁后存在）
 ├── log.txt          统一运行日志（冷启动重置）
 ├── EBWebView/       配置面板 WebView2 用户数据
-├── EBWebView_FRW/   旧版 WebView2 结果窗遗留目录（DComp 化后不再使用）
 └── uiaccess.dll     运行期释放的 UIAccess 提权依赖
 ```
 
@@ -54,8 +53,8 @@
 │   └── renderer/           Vue 3 配置面板（Vite 构建到 dist/）
 │       ├── bridge/         nativeBridgeAdapter.js：WebView2 宿主对象封装
 │       ├── composables/    useConfigPanel.js：配置草稿与全部业务操作
-│       ├── views/          ConfigPanel + 5 个 Tab + TabLogs + PickResult(遗留)
-│       └── router/         hash 路由：/config-panel、/pick-result
+│       ├── views/          ConfigPanel + 5 个 Tab + TabLogs
+│       └── router/         hash 路由：/config-panel
 ├── src-csharp/
 │   ├── Core/
 │   │   ├── Config/         ConfigModel / ConfigCache
@@ -69,7 +68,7 @@
 │   │                       WindowsSystem / YamlConfigService
 │   └── UI/
 │       ├── FCB/            悬浮按钮（WPF）
-│       ├── FRW/            结果浮窗（DCompResultWindow 现役；ResultWindow 遗留）
+│       ├── FRW/            结果浮窗（DCompResultWindow）
 │       ├── LRW/            结果暂留浮窗（LastResultWindow，右上角常驻）
 │       ├── CP/             配置面板宿主 + NativeBridge
 │       └── Splash/         启动器窗口与五阶段流水线
@@ -96,8 +95,7 @@
 
 关键约束：
 
-- 每个 `CoreWebView2Environment` 只能在其所属 STA 线程使用；
-- FRW 与 CP 使用**不同**的 userDataFolder，避免进程互相影响；
+- 每个 `CoreWebView2Environment` 只能在其所属 STA 线程使用；目前只有 CP 使用 WebView2；
 - `WH_MOUSE_LL` 鼠标钩子必须安装在**专职消息泵线程**，不能放在 60fps 渲染线程上（否则回调会被饿死）。
 
 ---
@@ -113,10 +111,9 @@
 5. **Stage 4**：启动 `IpcBroker`、`BackendScheduler`、`WindowManager` 与托盘；
 6. **Stage 5**：Splash 淡出，移交控制权。
 
-`App.xaml.cs` 中还有两个独立调试入口：
+`App.xaml.cs` 中还有一个独立调试入口：
 
-- `BLUERANDOM_DCOMP_FRW_DEMO=1`：跳过启动流水线，只跑结果窗 Demo（10 名测试学生）；
-- `BLUERANDOM_DCOMP_PROBE=1`：运行 DirectComposition 透明窗口技术原型。
+- `BLUERANDOM_DCOMP_FRW_DEMO=1`：跳过启动流水线，只跑结果窗 Demo（10 名测试学生）。
 
 ---
 
@@ -128,7 +125,7 @@
 
 ```csharp
 enum IpcAction { Init, Dest, Get, Post }
-enum IpcModule { Ipc, Fcb, Frw, Cp }
+enum IpcModule { Ipc, Fcb, Frw, Cp, Lrw }
 
 sealed class IpcMessage
 {
@@ -149,9 +146,13 @@ sealed class IpcMessage
 | FCB | `PositionChanged` | POST | `FcbPositionPayload` |
 | FCB | `HideWindow` / `ShowWindow` | GET | `null` |
 | FCB | `ApplyNewProp` | GET | `FloatingButtonConfig` |
+| FCB | `ApplyDefaultPickCount` | GET | `int`（1~10） |
 | FRW | `ShowWindow` | GET | `FrwShowPayload`（人数 + 学生列表） |
-| FRW | `WindowClosed` | POST | `null` |
+| FRW | `WindowClosed` | POST | `List<CalledStudent>` |
 | FRW | `ApplyNewProp` | GET | `PickResultDialogConfig` |
+| LRW | `ShowWindow` | GET | `LrwShowPayload`（名单 + 抽取时间） |
+| LRW | `HideWindow` | GET | `null` |
+| LRW | `ApplyNewProp` | GET | `PickResultDialogConfig` |
 | CP | `ShowConfigPanel` | GET | `null` |
 | CP | `ConfigSaved` | POST | YAML 字符串 |
 | CP | `OverwriteConfig` | GET | YAML 字符串 |
@@ -176,7 +177,7 @@ sealed class IpcMessage
 
 - `protocolVersion`、`studentList`、`allowRepeatDraw`、`agreedEula`、`activeClassId`；
 - `floatingButton`：尺寸、透明度、置顶、任务栏、坐标、自定义图标、图标尺寸、边框色；
-- `pickCountDialog`：默认抽取人数；
+- `pickCountDialog.defaultCount`：悬浮按钮打开人数选择器时的默认抽取人数，范围 1-10，可在「悬浮按钮 → 行为」中配置；
 - `pickResultDialog`：音效开关/音量、BGM 引用/音量/起点/淡入淡出、面板透明度/底色/边框色、`showLastResult`（结果暂留浮窗开关）、`lastResultBgColor` / `lastResultBorderColor` / `lastResultOpacity` / `lastResultAutoCloseSeconds`（暂留浮窗独立外观与自动关闭，0 = 不自动关闭）；
 - `admin`：管理员自启、任务名、启动要求、UIAccess 开关。
 
@@ -262,17 +263,18 @@ sealed class IpcMessage
   2. `BackendScheduler.HandleFrwWindowClosed` 缓存为 `LastResults`，调用 `RefreshLastResultWindow()`；
   3. 开关开启时通过 `@LRW ShowWindow`（`LrwShowPayload`）显示；新抽取开始时先发 `HideWindow`；
   4. 配置保存/重置后 `RefreshLastResultWindow()` 会按新开关值立即显示或隐藏。
-- 窗口固定在主屏工作区右上角（16 DIP 边距），`ShowActivated=False` 不抢焦点；✕ 只隐藏窗口，不改变配置。
+- 窗口固定在主屏工作区右上角，`ShowActivated=False` 不抢焦点；✕ 只隐藏窗口，不改变配置。
 - 姓名左侧只显示品阶圆点（彩 = 紫、金 = 金、蓝 = 蓝），圆点内无文字；底部固定显示操作提示，不被名单覆盖。
-- 外观独立于主结果窗：`lastResultBgColor` / `lastResultBorderColor` / `lastResultOpacity`；`lastResultAutoCloseSeconds > 0` 时底部显示逐秒倒计时，归零自动淡出隐藏（0 = 不自动关闭）。
-- `NativeBridge.GetLastResultsJson()` 现在读取 `BackendScheduler.LastResults`（不再依赖遗留的 `ResultWindow`）。
+- 入场/出场动画为**从屏幕右缘水平滑入 / 向右滑出**（`SlideTransform.X` 400 ↔ 0），不再使用整窗淡入淡出；窗口宽 360 DIP 并贴齐工作区右缘，卡片平移 400 DIP 后被窗口裁剪，视觉上等于从屏幕边缘进出。
+- 外观独立于主结果窗：`lastResultBgColor` / `lastResultBorderColor` / `lastResultOpacity`；`lastResultOpacity` 同时作用于卡片与姓名片/徽标/进度条等子元素（子元素底色 = 底色与边框色的混合色 × 不透明度），因此半透明卡片内不会残留实心白块。
+- `lastResultAutoCloseSeconds > 0` 时底部显示随时间线性收缩的进度条（`ScaleTransform.ScaleX: 1 → 0` 的 `DoubleAnimation`，时长即配置秒数，动画完成回调触发滑出隐藏），归零自动滑出隐藏；0 = 不自动关闭且不显示进度条。
 
 ---
 
 ## 10. 配置面板（Vue 3）
 
 - 入口：[main.js](../src/renderer/main.js) → `setupNativeBridgeAdapter()` → 挂载路由；
-- 路由：`/config-panel`（[ConfigPanel.vue](../src/renderer/views/ConfigPanel.vue)）、`/pick-result`（遗留 Web 版结果页，原生 FRW 已不依赖）；
+- 路由：`/config-panel`（[ConfigPanel.vue](../src/renderer/views/ConfigPanel.vue)）；结果演播与暂留浮窗均为原生窗口，不经过 Web 路由；
 - 桥接：[nativeBridgeAdapter.js](../src/renderer/bridge/nativeBridgeAdapter.js) 把 `chrome.webview.hostObjects.nativeBridge` 封装成 `window.configPanelApi`；
 - 状态：[useConfigPanel.js](../src/renderer/composables/useConfigPanel.js) 持有 `draft`（配置草稿）、Tab 导航、tooltip 和全部操作；
 - 页面：TabRoster（名单/权重）、TabFloating（悬浮球）、TabResult（结果窗/音效/BGM）、TabAdvanced（权限/自启/密码/更新）、TabAbout、TabLogs（右侧常驻日志）；
@@ -283,14 +285,13 @@ sealed class IpcMessage
 | 分组 | 方法 |
 | :--- | :--- |
 | 配置 | `GetConfigYaml` / `SaveConfigYaml` / `ResetConfig` / `ResetAllConfig` |
-| 班级 | `ListClassesJson` / `CreateClass` / `RenameClass` / `DeleteClass` / `LoadClassJson` / `SaveClassJson` |
-| 自定义资源 | `SaveCustomResource` / `GetCustomResourceJson` / `DeleteCustomResource` / `GetCustomDataUrl` / `PickFile` / `OpenConfigFolder` / `ClearCache` |
+| 班级 | `ListClassesJson` / `CreateClass` / `RenameClass` / `DeleteClass` |
+| 自定义资源 | `SaveCustomResource` / `GetCustomResourceJson` / `DeleteCustomResource` / `PickFile` / `OpenConfigFolder` / `ClearCache` |
 | 应用信息 | `GetAppInfoJson` / `CheckUpdateJson` / `GetChangelog` |
 | 权限与系统 | `CreateStartupTask` / `AdminElevate` / `Restart` / `CloseWindow` / `OpenDevTools` / `OpenUrl` |
 | 安全 | `IsSecurityEnabled` / `VerifyPassword` / `SetPassword` / `DisablePassword` |
 | 悬浮球 | `GetFloatingPositionJson` |
 | 日志 | `GetLogsJson` / `Log` |
-| 结果窗 | `GetPickResultConfigJson` / `GetLastResultsJson` / `ClosePickResult` |
 
 ---
 
@@ -321,12 +322,11 @@ npm run build:app
 | :--- | :--- |
 | `BLUERANDOM_USER_DATA_DIR` | 覆盖用户数据目录 |
 | `BLUERANDOM_DCOMP_FRW_DEMO=1` | 只运行结果窗 Demo（10 名测试学生） |
-| `BLUERANDOM_DCOMP_PROBE=1` | 运行 DComp 技术原型窗口 |
 | `BLUERANDOM_DCOMP_DUMP=1` | 导出当前结果窗帧到 `%TEMP%\br_frw_dump.png` |
 
 ### 测试覆盖（[tests/BlueRandom.Tests](../tests/BlueRandom.Tests)）
 
-`LotteryEngineTests`、`YamlConfigServiceTests`、`ClassManagerTests`、`CustomsStoreTests`、`IpcBrokerTests`、`UpdateServiceTests`、`WindowsSystemTests`、`ArcGeometryTests`。当前基线：**49 例全部通过**。
+`LotteryEngineTests`、`YamlConfigServiceTests`、`ClassManagerTests`、`CustomsStoreTests`、`IpcBrokerTests`、`UpdateServiceTests`、`WindowsSystemTests`、`ArcGeometryTests`、`LrwVisualThemeTests`、`LastResultWindowTests`。当前基线：**68 例全部通过**。
 
 ---
 
@@ -364,16 +364,13 @@ npm run build:app
 
 ## 13. 已知坑与注意事项
 
-1. **`docs/ARCHITECTURE.md` 已部分过时**：它仍把 FRW 描述为 WPF `ResultWindow`，实际现役实现是 `DCompResultWindow`。
-2. **未纳入版本控制的文件**：`src-csharp/UI/FRW/DCompResultWindow.cs`、`DCompProbe.cs`、`public/image/Letter_*_Shadow.png` 在 `NEXT-Dev` 工作区中仍是未跟踪状态，提交时勿遗漏（否则他处拉取后编译失败）。
-3. **旧实现保留**：`ResultWindow.xaml(.cs)`、`src/renderer/views/PickResult.vue` 已不再由 `WindowManager` 使用，改动前先确认调用点。
-4. **资源路径**：WebView2 以 `file://` 加载页面，Vue 中引用 `public/` 资源必须走 `resolveAssetUrl`，不要用 `/image/...` 绝对路径。
-5. **`SetCursor` 只能收真实 HCURSOR**，`IDC_*` 只是 `LoadCursor` 的入参；这是本次忙光标问题的根因。
-6. **`WH_MOUSE_LL` 钩子线程必须保持专职泵消息**，不要合并到渲染线程。
-7. **YAML 注释是产品特性**：手工编辑 `config.yaml` 是预期用法，保存时必须用 `ToYamlWithComments`，不要用裸序列化覆盖。
-8. **配置迁移**：`protocolVersion` 与 `package.json` 的 `codename` 绑定，改协议版本要同时考虑 `YamlConfigService` 的迁移分支与测试。
-9. **版权**：`public/` 下 Blue Archive 素材与字体有独立授权，BGM/抽取音效由用户自行上传，禁止把版权音频提交进仓库。
-10. **日志**：`AppLogger.Initialize` 每次冷启动会重置 `log.txt`，不要把需要长期保留的信息只写进日志。
+1. **资源路径**：WebView2 以 `file://` 加载页面，Vue 中引用 `public/` 资源必须走 `resolveAssetUrl`，不要用 `/image/...` 绝对路径。
+2. **`SetCursor` 只能收真实 HCURSOR**，`IDC_*` 只是 `LoadCursor` 的入参；这是本次忙光标问题的根因。
+3. **`WH_MOUSE_LL` 钩子线程必须保持专职泵消息**，不要合并到渲染线程。
+4. **YAML 注释是产品特性**：手工编辑 `config.yaml` 是预期用法，保存时必须用 `ToYamlWithComments`，不要用裸序列化覆盖。
+5. **配置迁移**：`protocolVersion` 与 `package.json` 的 `codename` 绑定，改协议版本要同时考虑 `YamlConfigService` 的迁移分支与测试。
+6. **版权**：`public/` 下 Blue Archive 素材与字体有独立授权，BGM/抽取音效由用户自行上传，禁止把版权音频提交进仓库。
+7. **日志**：`AppLogger.Initialize` 每次冷启动会重置 `log.txt`，不要把需要长期保留的信息只写进日志。
 
 ---
 
@@ -383,3 +380,8 @@ npm run build:app
 | :--- | :--- |
 | 2026-10-18 | 修复结果浮窗动画期间 `IDC_WAIT` 忙光标：`SetCursor` 改用真实 `HCURSOR` 句柄，并在每帧渲染后刷新；新增本知识库与 `.gitignore` 规则。 |
 | 2026-10-18 | 新增「结果暂留浮窗」：`showLastResult` 开关 + LRW 独立线程，抽取结束后在屏幕右上角显示上一轮结果，可关闭，新抽取开始时自动隐藏；支持独立底色/边框/不透明度、自动关闭倒计时（0 = 不自动关闭），姓名左侧仅显示品阶圆点（彩 = 紫）。 |
+| 2026-10-20 | 完善「结果暂留浮窗」：入场/出场由淡入淡出改为从屏幕右缘水平滑入/滑出（`SlideTransform.X` 400 ↔ 0）；`lastResultOpacity` 现在同步作用于姓名片、人数徽标、进度条与 ✕ 悬停底色，半透明卡片内不再出现实心白块；底部倒计时文本改为线性收缩的进度条（`ScaleTransform.ScaleX` 1 → 0 动画）。 |
+| 2026-10-20 | 在「悬浮按钮 → 行为」中新增默认抽取人数（1-10）配置，保存后通过 `@FCB ApplyDefaultPickCount` 热更新人数选择器；人数选择器展开时不打断用户当前调整。 |
+| 2026-10-20 | 移除 ClassIsland 联动播报占位卡片；清理遗留栈与死代码：删除 WPF `ResultWindow`、Web 版 `PickResult.vue` 与 `/pick-result` 路由、`nativeBridgeAdapter` 的 `pickResultApi`、`NativeBridge` 的 `GetPickResultConfigJson` / `GetLastResultsJson` / `ClosePickResult`、仅 FRW 使用的 WebView2 独立环境（`EBWebView_FRW` / `GetFrwEnvironmentAsync` / `GetEnvironmentAsync` 兼容壳），以及 `DCompProbe` 技术原型与 `BLUERANDOM_DCOMP_PROBE` 入口。 |
+| 2026-10-20 | 清理未闭环的 API 与死代码：移除 NativeBridge 未使用的 `LoadClassJson`、`SaveClassJson`、`GetCustomDataUrl` 及前端适配层的 `loadClass`、`saveClass`；移除未引用的 `FcbInitPayload`；移除无生产者的 `WindowOverlaid` IPC 监听分支与 `CloseWindow`（FRW）分支；清理 `ARCHITECTURE.md` 7.3 重复节与 `TabAdvanced.vue` 遗留注释。 |
+| 2026-10-20 | 前端单 chunk 拆分优化：通过 `vite.config.js` 的 `manualChunks` 将 `tab-logs`、`rizui-md`（Markdown 渲染/编辑模块）、`vendor-yaml`、`vendor-vue` 精准拆分，并将 `TabLogs`、`TabAbout`、`TabAdvanced` 异步化；首屏核心 bundle 尺寸从 716 kB 降至 58 kB（降幅 92%），彻底解决 Vite 超过 500 kB 警告并显著提速 WebView2 冷启动。 |

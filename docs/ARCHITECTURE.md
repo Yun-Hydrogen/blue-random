@@ -194,6 +194,7 @@ flowchart TD
 - **1~10 抽动态胶囊选择器 (`PickerCapsule`)**：
   - 严格保持在主按钮上方恰好 **8px 黄金间距**，高度 36px 胶囊全圆角形态（`CornerRadius=18`）。
   - 内部由 `MIN (11px 粗体)`、`细分隔线 (1x16px)`、`− (22px 粗体)`、`细分隔线`、`当前人数徽章 (36x28px, #66CCFF 纯正天蓝底色白字, 0.25s 脉冲弹跳动画)`、`细分隔线`、`+ (20px 粗体)`、`细分隔线`、`MAX (11px 粗体)` 紧密排布。
+  - **默认抽取人数与热更新**：启动时从 `pickCountDialog.defaultCount` 读取默认人数（范围 1-10），配置面板保存后通过 `@FCB ApplyDefaultPickCount` 热重载；若选择器当前正被展开调整，则不打断用户操作。
   - **智能边界保护**：人数为 1 时禁用 `MIN` 与 `−`；人数为 10 时禁用 `MAX` 与 `+`。
   - **展开/收起过渡动效 (`picker-pop`)**：
     - 展开：缩放 `0.85 -> 1.0`，位移 `12px -> 0`，配合 `CubicEase` 用时 0.22 秒。
@@ -230,11 +231,13 @@ flowchart TD
 
 ### 6.3 结果暂留浮窗 (@LRW - Last Result Window)
 - **开关**：配置面板「结果浮窗 → 结果暂留浮窗」，对应 `pickResultDialog.showLastResult`（默认关闭）。
-- **显示时机**：FRW 上报 `WindowClosed` 且携带本轮名单后，若开关开启，则在主屏工作区右上角显示（16 DIP 边距）。
+- **显示时机**：FRW 上报 `WindowClosed` 且携带本轮名单后，若开关开启，则在主屏工作区右上角滑入显示。
 - **交互**：无边框、透明、置顶、不抢焦点；标题栏右侧 ✕ 仅隐藏窗口，下一次抽取结束后自动重新显示。
-- **生命周期**：下一次抽取开始时自动隐藏，避免与全屏演播重叠；关闭开关后立即淡出隐藏。
+- **生命周期**：下一次抽取开始时自动隐藏，避免与全屏演播重叠；关闭开关后立即滑出隐藏。
+- **入场/出场动画**：不做淡入淡出，改为**从屏幕右缘水平滑入**（`TranslateTransform.X: 400 → 0`，300ms `CubicEase.EaseOut`）与**向右滑出**（当前位移 → 400，200ms `CubicEase.EaseIn`）。窗口宽 360 DIP 且整体贴齐工作区右缘，卡片（320 DIP）平移 400 DIP 后完全移出窗口并被裁剪，视觉上等效于从屏幕边缘滑出；只用 `Hide()` 收尾，因此不再出现整窗透明度变化与子元素不同步的问题。
 - **视觉**：18px 圆角卡片、可配置描边/底色/不透明度与柔和阴影；姓名左侧以品阶圆点区分（彩 = 紫、金 = 金、蓝 = 蓝），圆点内无文字；超过可用高度时列表滚动。
-- **自动关闭**：可配置 `lastResultAutoCloseSeconds`（0 = 不自动关闭），开启后底部显示逐秒倒计时，归零时淡出隐藏。
+- **透明度联动**：`lastResultOpacity` 同时作用于整张卡片与所有子元素（姓名片背景、人数徽标、进度条轨道、✕ 悬停底色）。子元素底色由「`lastResultBgColor` 向 `lastResultBorderColor` 混合」生成层级色，再统一乘配置的不透明度，因此卡片变透明时不会残留实心白块。
+- **自动关闭**：可配置 `lastResultAutoCloseSeconds`（0 = 不自动关闭）。大于 0 时底部显示一条**随时间线性收缩的进度条**（`ScaleTransform.ScaleX: 1 → 0` 的 `DoubleAnimation`，时长即配置秒数，动画完成回调触发滑出隐藏），归零时滑出隐藏；底部不再有"X 秒后自动关闭"文本。
 
 ---
 
@@ -257,25 +260,17 @@ flowchart TD
   ```
   通过将 `dist/` 映射为标准 `https://appassets/` 虚拟安全源，实现 Vite ES 模块、静态资源与 NativeBridge 的秒开加载与无感通信。
 
-### 7.3 NativeBridge 资产直连机制
-不同于抽卡指令需要跨总线协调，多班级数据（`data/classes/`）、自定义资源文件（`data/resources/`）以及系统交互**完全由承载 WebView2 的 C# 宿主通过 `NativeBridge` COM 对象直连处理**：
 ### 7.3 NativeBridge 资产直连机制与多班级同步
-不同于抽卡指令需要跨总线协调，多班级数据（`configs/classes/`）、自定义资源文件（`configs/customs/`）以及系统交互**完全由承载 WebView2 的 C# 宿主通过 `NativeBridge` COM 对象直连处理**：
+不同于抽卡指令需要跨总线协调，多班级数据（`~/.blue random/classes/`）、自定义资源文件（`~/.blue random/customs/`）以及系统交互**完全由承载 WebView2 的 C# 宿主通过 `NativeBridge` COM 对象直连处理**：
 
 ```mermaid
 flowchart LR
     VueUI["Vue 3 前端页面 (WebUI)"] <==>|window.chrome.webview.hostObjects.nativeBridge| Bridge["NativeBridge (C# COM 宿主对象)"]
-    Bridge <-->|直接读写| ClassesDir["data/classes/ (多班级列表)"]
-    Bridge <-->|直接上传/管理| CustomsDir["data/resources/ (音频/立绘素材)"]
-    Bridge <-->|系统级调用| Shell["Windows Shell / 实时日志检索 / 密码验证 / 提权重启"]
-    Bridge <-->|直接读写| ClassesDir["configs/classes/ (多班级列表)"]
-    Bridge <-->|直接上传/管理| CustomsDir["configs/customs/ (音频/立绘素材)"]
+    Bridge <-->|直接读写| ClassesDir["classes/ (多班级列表)"]
+    Bridge <-->|直接上传/管理| CustomsDir["customs/ (音频/图标素材)"]
     Bridge <-->|系统级调用| Shell["Windows Shell / 计划任务 / 实时日志 / 密码认证 / 提权重启"]
 ```
 
-- **扩展 API 能力清单**：
-  - `GetConfigYaml()` / `SaveConfigYaml(yaml)`: 现行配置读取与热生效保存
-  - `ListClassesJson()` / `CreateClass(name)` / `RenameClass(...)` / `DeleteClass(...)`: 班级库管理
 - **扩展 API 能力清单与协议约定**：
   - `GetConfigYaml()` / `SaveConfigYaml(yaml)`: 现行配置读取与即时热生效保存（同步将名单写入当前激活班级文件）
   - `ListClassesJson()`: 读取所有班级配置并自动回填 `activeClassId`，统一 camelCase 序列化
@@ -309,7 +304,8 @@ flowchart LR
 ├── log.txt              # 运行诊断滚动日志
 ├── .SHA256              # 管理员保护密码散列凭据
 ├── classes/             # 多班级名单目录 (classes_*.yaml)
-└── customs/             # 自定义素材库 (音频与自定义图标)
+├── customs/             # 自定义素材库 (音频与自定义图标)
+└── EBWebView/           # 配置面板 WebView2 用户数据
 ```
 
 ### 9.2 原生系统托盘体系 (TrayService)

@@ -628,6 +628,20 @@ public partial class FloatingButtonWindow : Window
     }
 
     /// <summary>
+    /// 热更新配置面板设置的默认抽取人数；人数选择器展开时不打断用户当前调整。
+    /// </summary>
+    public void ApplyDefaultPickCount(int count)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (!_isPickerOpen)
+            {
+                SetPickCount(count);
+            }
+        });
+    }
+
+    /// <summary>
     /// 快捷设置抽取人数为下限 1 人。
     /// </summary>
     private void OnMinClick(object sender, RoutedEventArgs e) => SetPickCount(1);
@@ -696,6 +710,13 @@ public partial class FloatingButtonWindow : Window
                     if (msg.Payload is FloatingButtonConfig cfg)
                     {
                         ApplyProps(cfg);
+                    }
+                    break;
+
+                case "ApplyDefaultPickCount":
+                    if (msg.Payload is int count)
+                    {
+                        ApplyDefaultPickCount(count);
                     }
                     break;
 

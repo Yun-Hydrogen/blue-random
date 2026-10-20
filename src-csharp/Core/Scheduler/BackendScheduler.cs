@@ -28,7 +28,6 @@ public static class BackendScheduler
     private static readonly object _stateLock = new();
     private static bool _isDrawing = false;
     private static Timer? _debounceSaveTimer;
-    private static DateTime _lastOverlaidTime = DateTime.MinValue;
 
     private static List<CalledStudent> _lastResults = new();
     private static DateTime _lastDrawAt = DateTime.MinValue;
@@ -86,10 +85,6 @@ public static class BackendScheduler
             case "RandomTriggered":
                 int amount = msg.Payload is int a ? a : 1;
                 HandleFcbRandomTriggered(amount);
-                break;
-
-            case "WindowOverlaid":
-                HandleFcbWindowOverlaid();
                 break;
 
             case "ErrorHappened":
@@ -185,24 +180,6 @@ public static class BackendScheduler
             CalledStudents = calledStudents
         };
         IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ShowWindow", showPayload));
-    }
-
-    /// <summary>
-    /// 处理悬浮球失去顶层 Z 序或被全屏窗口遮挡的仲裁信号。
-    /// 包含 1000ms 本地节流防抖，向 FCB 投递 ShowWindow 强制重置 HWND_TOPMOST。
-    /// </summary>
-    private static void HandleFcbWindowOverlaid()
-    {
-        // 1 秒节流，防止高频抢占焦点
-        if ((DateTime.Now - _lastOverlaidTime).TotalMilliseconds < 1000)
-        {
-            return;
-        }
-        _lastOverlaidTime = DateTime.Now;
-
-        AppLogger.Info("Backend", "检测到悬浮窗被遮挡，触发置顶刷新仲裁");
-        // 向 FCB 发送刷新置顶指令
-        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ShowWindow"));
     }
 
     // ========================================================================
@@ -379,6 +356,11 @@ public static class BackendScheduler
 
             // 5. 热重载广播下发
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyNewProp", ConfigCache.GetFCBProps()));
+            IpcBroker.Send(IpcMessage.Create(
+                IpcAction.Get,
+                IpcModule.Fcb,
+                "ApplyDefaultPickCount",
+                ConfigCache.Current.PickCountDialog.DefaultCount));
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyNewProp", ConfigCache.GetFRWProps()));
             RefreshLastResultWindow();
             return true;
