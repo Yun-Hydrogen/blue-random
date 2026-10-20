@@ -5,9 +5,10 @@
 
   功能概述：
     1. 按钮样式   —— 大小百分比 / 屏幕位置 X,Y / 持续置顶开关
-    2. 中心图标   —— 文件选择器（上传到 customs/ 目录）+ 圆形预览 + 图标尺寸滑条
-    3. 边框颜色   —— rizui_colorpicker 组件（HSL 调色盘 Dialog）
-    4. 滑条填充   —— rizui_slider 组件自动处理轨道渐变
+    2. 抽取人数   —— 默认打开人数（1-10 人）
+    3. 中心图标   —— 文件选择器（上传到 customs/ 目录）+ 圆形预览 + 图标尺寸滑条
+    4. 边框颜色   —— rizui_colorpicker 组件（HSL 调色盘 Dialog）
+    5. 滑条填充   —— rizui_slider 组件自动处理轨道渐变
 
   数据流：
     父组件 ConfigPanel 持有 draft.floatingButton 对象
@@ -45,6 +46,18 @@
   <div class="tab-page floating-tab">
     <!-- 一、按钮样式 -->
     <rizui_card title="行为" desc="调整悬浮按钮的行为" icon="fa-solid fa-toggle-on">
+
+      <rizui_cfgrow label="默认抽取人数" hint="打开悬浮按钮人数选择器时预先选中的人数，范围为 1-10 人">
+        <rizui_slider
+          :model-value="pickCount.defaultCount ?? 1"
+          :min="1"
+          :max="10"
+          :step="1"
+          :color="tabTheme"
+          display="人"
+          @update:model-value="$emit('update:pickCount',{...pickCount,defaultCount:$event})"
+        />
+      </rizui_cfgrow>
 
       <rizui_cfgrow label="位置 X / Y" hint="实时显示悬浮按钮当前位置，可直接编辑；在配置面板中“应用”时随配置一起保存">
         <div class="cfg-xy-group">
@@ -85,7 +98,7 @@
               <input ref="iconFileInput" type="file" accept="image/*" @change="handleIconPick" style="display:none" />
             </div>
             <div class="icon-path-row icon-path-sub">
-              <span class="cfg-hint">图片将以 base64 存储到配置文件中</span>
+              <span class="cfg-hint">图片将作为自定义资源独立存储并引用</span>
               <rizui_button text="恢复默认" :color="tabTheme" @click="resetIcon" />
             </div>
           </div>
@@ -133,14 +146,21 @@ const tabTheme = '#39c5bb'
  *    iconSize      (number)  图标显示尺寸(px)，默认 48
  *    borderColor   (string)  边框颜色，默认 '#ffffff'
  */
-const props = defineProps({ fb: Object })
+const props = defineProps({
+  fb: Object,
+  pickCount: {
+    type: Object,
+    default: () => ({ defaultCount: 1 })
+  }
+})
 
 /*
  *  emit：向父组件发送数据变更事件
  *  update:fb —— 悬浮按钮配置发生变化
+ *  update:pickCount —— 默认抽取人数配置发生变化
  *  注意：必须传递完整的新对象（用扩展运算符创建），不能直接修改 props.fb 的属性
  */
-const emit = defineEmits(['update:fb'])
+const emit = defineEmits(['update:fb', 'update:pickCount'])
 
 /* 悬浮按钮位置：默认实时跟随（主进程轮询）；用户编辑后以手动值为准 */
 const userEditedPosition = ref(false)
@@ -166,7 +186,9 @@ const posY = computed({
   }
 })
 
-/* 实时读取悬浮按钮当前屏幕位置；未手动编辑时同步到输入框 */
+/**
+ * 实时从宿主读取悬浮按钮当前屏幕物理位置；未手动编辑时同步到输入框中。
+ */
 async function refreshLivePosition() {
   try {
     const pos = await window.configPanelApi?.getFloatingPosition?.()
@@ -227,9 +249,8 @@ const iconPlaceholder = computed(() => {
  */
 const iconPreviewSrc = computed(() => previewDataUrl.value || defaultIcon)
 
-/*
- *  loadCustomIcon — 按 customIconId 从 customs/ 拉取资源并组 data URL 供预览。
- *  在组件挂载时与 customIconId 变化时调用。
+/**
+ * 按 customIconId 从 customs/ 拉取资源并组装 data URL 供本地预览。
  */
 async function loadCustomIcon() {
   const id = props.fb.customIconId
@@ -262,29 +283,11 @@ const effectivePreviewSize = computed(() => {
 //  2. 文件选择：读取图片 → 上传到 customs/ 目录 → 配置存引用
 // ================================================================
 
-/*
- *  处理文件选择器的 change 事件。
- *
- *    1. 从 e.target.files[0] 获取用户选择的文件
- *    2. 用 FileReader.readAsDataURL() 读取为 data URL，解析出 mimeType + base64
- *    3. 通过 configPanelApi.saveCustomStaged() 将数据暂存到主进程内存
- *       （不落盘；点击“应用”保存配置时才写入 customs/，未应用则被舍弃）
- *    4. emit('update:fb', { customIconId: stagedId })
- *    5. 清空 input.value 以允许重复选择同一文件
- *
- *  注意：
- *    - 读取/暂存均为异步，emit 在回调中执行
- *    - 大图片（>1MB）的 base64 会很大，建议用户使用小尺寸图标
- */
-/*
- * convertImageToPng(file) —— 将用户选择的任意格式图片（包括 WebP、SVG、AVIF、JPEG、BMP、PNG 等）
- * 通过 HTML5 Canvas 转码为标准的 32 位 PNG，并限制最大分辨率（256px）。
- *
- * 原因：
- *   1. Windows 系统的 WIC (Windows Imaging Component) 在未安装扩展解码器时不支持 WebP / SVG，
- *      直接将 WebP/SVG 传给 WPF 会抛出 WINCODEC_ERR_COMPONENTNOTFOUND (0x88982F50) 异常。
- *   2. 转码为标准 PNG 可以保证在所有 Windows 版本上 100% 原生无缝解码显示。
- *   3. 适当缩放到最大 256x256，既保证了高清显示，又大幅减少 base64 体积和配置文件内存占用。
+/**
+ * 将用户选择的任意格式图片通过 HTML5 Canvas 转码为标准的 32 位 PNG，并限制最大分辨率（256px）。
+ * 消除 Windows WIC (Windows Imaging Component) 因缺少 WebP/SVG 编解码器导致的 WINCODEC 0x88982F50 异常。
+ * @param {File} file - 用户选择的原始图像文件
+ * @returns {Promise<{dataUrl: string, base64: string, mimeType: string}>}
  */
 function convertImageToPng(file) {
   return new Promise((resolve, reject) => {
@@ -327,6 +330,10 @@ function convertImageToPng(file) {
   })
 }
 
+/**
+ * 处理用户选择自定义图标文件的 change 事件并提交暂存。
+ * @param {Event} e - 文件选取事件
+ */
 async function handleIconPick(e) {
   const file = e.target.files[0]
   if (!file) return
@@ -358,9 +365,8 @@ async function handleIconPick(e) {
 //  3. 图标重置：恢复默认图标设置
 // ================================================================
 
-/*
- *  清空 customIconId（使用默认图标），图标尺寸恢复为 48px。
- *  旧资源文件在“应用”保存配置时由主进程统一删除（未应用则不落盘）。
+/**
+ * 清空 customIconId（恢复默认图标），图标尺寸恢复为 48px。
  */
 function resetIcon() {
   previewDataUrl.value = ''

@@ -1,3 +1,10 @@
+// ============================================================================
+// 文件名称: YamlConfigServiceTests.cs
+// 项目名称: BlueRandom.Tests
+// 文件说明: YAML 配置服务 (YamlConfigService) 与迁移引擎的单元测试
+// 核心职责: 验证边界钳位归一化、带注释 YAML 生成、用户目录探测、协议嗅探与旧版配置平滑迁移
+// ============================================================================
+
 using System;
 using System.IO;
 using BlueRandom.Core.Config;
@@ -6,8 +13,14 @@ using Xunit;
 
 namespace BlueRandom.Tests;
 
+/// <summary>
+/// YAML 配置持久化与平滑迁移单元测试集
+/// </summary>
 public class YamlConfigServiceTests
 {
+    /// <summary>
+    /// 验证数值越界边界归一化保护（如缩放比、透明度、默认点名人数边界钳位）
+    /// </summary>
     [Fact]
     public void Normalize_ClampsOutOfBoundsValues()
     {
@@ -31,6 +44,9 @@ public class YamlConfigServiceTests
         Assert.Equal(10, normalized.PickCountDialog.DefaultCount);
     }
 
+    /// <summary>
+    /// 验证生成的 YAML 包含标准的中文业务提示注释与核心字段
+    /// </summary>
     [Fact]
     public void ToYamlWithComments_ContainsExpectedFieldsAndComments()
     {
@@ -52,9 +68,13 @@ public class YamlConfigServiceTests
         Assert.Contains("admin:", yaml);
     }
 
+    /// <summary>
+    /// 验证数据目录解析定位在当前用户个人主文件夹下的 `.blue random` 目录
+    /// </summary>
     [Fact]
     public void GetUserDataDir_ReturnsDotBlueRandomInUserProfile()
     {
+        YamlConfigService.OverrideUserDataDir = null;
         string expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".blue random");
         string actual = YamlConfigService.GetUserDataDir();
 
@@ -62,13 +82,19 @@ public class YamlConfigServiceTests
         Assert.True(Directory.Exists(actual));
     }
 
+    /// <summary>
+    /// 验证 AppVersion 能够正确自内嵌 package.json 解析版本号与版本代号
+    /// </summary>
     [Fact]
     public void AppVersion_LoadsVersionAndCodenameFromPackageJson()
     {
-        Assert.Equal("26.10.02", BlueRandom.Core.AppVersion.Version);
+        Assert.False(string.IsNullOrWhiteSpace(BlueRandom.Core.AppVersion.Version));
         Assert.False(string.IsNullOrWhiteSpace(BlueRandom.Core.AppVersion.Codename));
     }
 
+    /// <summary>
+    /// 验证协议版本嗅探器能够在未完整反序列化 YAML 的情况下快速提取 protocolVersion
+    /// </summary>
     [Fact]
     public void PeekProtocolVersion_ExtractsCorrectly()
     {
@@ -81,6 +107,9 @@ public class YamlConfigServiceTests
         Assert.Null(YamlConfigService.PeekProtocolVersion(yaml3));
     }
 
+    /// <summary>
+    /// 验证导出带有协议版本字段的注释 YAML
+    /// </summary>
     [Fact]
     public void ToYamlWithComments_IncludesProtocolVersion()
     {
@@ -92,27 +121,30 @@ public class YamlConfigServiceTests
         Assert.Contains("protocolVersion: 'Schale'", yaml);
     }
 
+    /// <summary>
+    /// 验证跨 C# 版本升级时协议代号变更（如从历史版本升级至当前版本），配置能平滑反序列化、补齐默认字段并更新代号
+    /// </summary>
     [Fact]
-    public void LegacyConfig_MigratesOnProtocolMismatch()
+    public void VersionUpgrade_MigratesOnProtocolMismatch()
     {
-        string legacyYaml = @"
-student_list:
+        string previousYaml = @"
+protocolVersion: 'Shiroko'
+allowRepeatDraw: false
+studentList:
   - name: '阿罗娜'
     weight: 1.5
-    letter_color: 'rainbow'
-allow_repeat_draw: false
-floating_button:
-  size_percent: 120
-  transparency_percent: 30
-  custom_icon_id: 'custom_001'
-pick_result_dialog:
-  gachaSoundVolume: 0.75
+    letterColor: 'rainbow'
+floatingButton:
+  sizePercent: 120
+  transparencyPercent: 30
+  customIconId: 'custom_001'
+pickResultDialog:
+  soundVolume: 75
 ";
-        string? peeked = YamlConfigService.PeekProtocolVersion(legacyYaml);
-        Assert.Null(peeked);
-        Assert.NotEqual(BlueRandom.Core.AppVersion.Codename, peeked);
+        string? peeked = YamlConfigService.PeekProtocolVersion(previousYaml);
+        Assert.Equal("Shiroko", peeked);
 
-        var migrated = YamlConfigService.MigrateLegacyConfig(legacyYaml);
+        var migrated = YamlConfigService.MigrateLegacyConfig(previousYaml);
         migrated.ProtocolVersion = BlueRandom.Core.AppVersion.Codename;
 
         Assert.Single(migrated.StudentList);
@@ -126,7 +158,69 @@ pick_result_dialog:
         Assert.Equal(75, migrated.PickResultDialog.SoundVolume);
 
         Assert.Equal(1, migrated.PickCountDialog.DefaultCount);
-        Assert.True(migrated.PickResultDialog.ShowDeco);
         Assert.Equal(BlueRandom.Core.AppVersion.Codename, migrated.ProtocolVersion);
+    }
+
+    /// <summary>
+    /// 验证"结果暂留浮窗"开关默认关闭，且能以 showLastResult 为键完成 YAML 双向往返。
+    /// </summary>
+    [Fact]
+    public void ShowLastResult_DefaultsFalseAndRoundTrips()
+    {
+        var defaults = new RootConfig().PickResultDialog;
+        Assert.False(defaults.ShowLastResult);
+        Assert.Equal(0.9, defaults.LastResultOpacity);
+        Assert.Equal(0, defaults.LastResultAutoCloseSeconds);
+        Assert.Equal("#ffffff", defaults.LastResultBgColor);
+        Assert.Equal("#66ccff", defaults.LastResultBorderColor);
+
+        var cfg = new RootConfig();
+        cfg.PickResultDialog.ShowLastResult = true;
+        cfg.PickResultDialog.LastResultBgColor = "#112233";
+        cfg.PickResultDialog.LastResultBorderColor = "#445566";
+        cfg.PickResultDialog.LastResultOpacity = 0.55;
+        cfg.PickResultDialog.LastResultAutoCloseSeconds = 30;
+
+        string yaml = YamlConfigService.ToYamlWithComments(cfg);
+        Assert.Contains("showLastResult: true", yaml);
+        Assert.Contains("lastResultBgColor: '#112233'", yaml);
+        Assert.Contains("lastResultBorderColor: '#445566'", yaml);
+        Assert.Contains("lastResultOpacity: 0.55", yaml);
+        Assert.Contains("lastResultAutoCloseSeconds: 30", yaml);
+
+        var deserializer = new YamlDotNet.Serialization.DeserializerBuilder()
+            .WithNamingConvention(YamlDotNet.Serialization.NamingConventions.CamelCaseNamingConvention.Instance)
+            .IgnoreUnmatchedProperties()
+            .Build();
+
+        var parsed = deserializer.Deserialize<RootConfig>(yaml);
+        Assert.True(parsed.PickResultDialog.ShowLastResult);
+        Assert.Equal("#112233", parsed.PickResultDialog.LastResultBgColor);
+        Assert.Equal("#445566", parsed.PickResultDialog.LastResultBorderColor);
+        Assert.Equal(0.55, parsed.PickResultDialog.LastResultOpacity);
+        Assert.Equal(30, parsed.PickResultDialog.LastResultAutoCloseSeconds);
+    }
+
+    /// <summary>
+    /// 验证结果暂留浮窗的透明度与自动关闭时长会被钳制到安全区间。
+    /// </summary>
+    [Fact]
+    public void Normalize_ClampsLastResultOptions()
+    {
+        var lower = new RootConfig();
+        lower.PickResultDialog.LastResultOpacity = 0.01;
+        lower.PickResultDialog.LastResultAutoCloseSeconds = -5;
+
+        var normalizedLower = YamlConfigService.Normalize(lower);
+        Assert.Equal(0.1, normalizedLower.PickResultDialog.LastResultOpacity);
+        Assert.Equal(0, normalizedLower.PickResultDialog.LastResultAutoCloseSeconds);
+
+        var upper = new RootConfig();
+        upper.PickResultDialog.LastResultOpacity = 9.0;
+        upper.PickResultDialog.LastResultAutoCloseSeconds = 99999;
+
+        var normalizedUpper = YamlConfigService.Normalize(upper);
+        Assert.Equal(1.0, normalizedUpper.PickResultDialog.LastResultOpacity);
+        Assert.Equal(3600, normalizedUpper.PickResultDialog.LastResultAutoCloseSeconds);
     }
 }

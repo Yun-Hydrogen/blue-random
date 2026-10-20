@@ -1,0 +1,146 @@
+<Window x:Class="BlueRandom.UI.LRW.LastResultWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="上次抽取结果"
+        Width="360"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <!--
+      动态样式资源：由 ApplyProps 按「底色 + 边框色 + 不透明度」重新计算并替换。
+      姓名片、徽标、进度条等子元素都使用与整张卡片相同的不透明度，
+      避免卡片半透明时子元素仍是实心白块。
+    -->
+    <Window.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#66CCFF"/>
+        <SolidColorBrush x:Key="RowBackgroundBrush" Color="#F6FCFF"/>
+        <SolidColorBrush x:Key="BadgeBackgroundBrush" Color="#E7F7FF"/>
+        <SolidColorBrush x:Key="CloseHoverBrush" Color="#E7F7FF"/>
+        <SolidColorBrush x:Key="ProgressTrackBrush" Color="#E7F7FF"/>
+    </Window.Resources>
+
+    <!--
+      窗口整体贴齐屏幕右缘（宽 360 = 卡片 320 + 左右各 20 留白），卡片在窗口内左对齐：
+      卡片右缘距屏幕 20 DIP，四周留白用于露出柔和投影。
+      卡片向右平移 400 DIP 时完全移出窗口并被裁剪，视觉上即"从屏幕右缘滑入 / 滑出"。
+    -->
+    <Border x:Name="RootCard"
+            Width="320"
+            HorizontalAlignment="Left"
+            Margin="20,16,20,20"
+            CornerRadius="18"
+            BorderThickness="3"
+            BorderBrush="{DynamicResource AccentBrush}"
+            Background="#F2FFFFFF"
+            Padding="14,12,14,10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270"
+                              Opacity="0.22" Color="#08233D"/>
+        </Border.Effect>
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="SlideTransform" X="400"/>
+        </Border.RenderTransform>
+        <DockPanel>
+            <!-- 标题栏 -->
+            <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="4" Height="16" CornerRadius="2"
+                            Background="{DynamicResource AccentBrush}" Margin="0,0,8,0"/>
+                    <TextBlock Text="上次抽取结果"
+                               FontSize="14" FontWeight="Bold" Foreground="#16283A"
+                               VerticalAlignment="Center"/>
+                    <Border x:Name="CountBadge" Margin="8,0,0,0" Padding="7,1"
+                            CornerRadius="9" Background="{DynamicResource BadgeBackgroundBrush}"
+                            VerticalAlignment="Center">
+                        <TextBlock x:Name="CountText" Text="0 人" FontSize="11" Foreground="#2E86C8"/>
+                    </Border>
+                </StackPanel>
+
+                <Button x:Name="CloseButton" Width="24" Height="24"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                        ToolTip="关闭" Click="OnCloseClick">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bg" CornerRadius="12" Background="Transparent">
+                                <TextBlock x:Name="Glyph" Text="✕" FontSize="12" FontWeight="Bold"
+                                           Foreground="#7A93A8"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bg" Property="Background"
+                                            Value="{DynamicResource CloseHoverBrush}"/>
+                                    <Setter TargetName="Glyph" Property="Foreground" Value="#2E86C8"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
+            <TextBlock x:Name="TimeText" DockPanel.Dock="Top"
+                       FontSize="10.5" Foreground="#8AA0B2" Margin="0,0,0,8"/>
+
+            <TextBlock x:Name="EmptyText" DockPanel.Dock="Top"
+                       Text="暂无抽取结果" FontSize="12" Foreground="#93A9BA"
+                       Margin="0,14,0,14" HorizontalAlignment="Center"
+                       Visibility="Collapsed"/>
+
+            <!--
+              底部固定区域：自动关闭进度条 + 操作提示
+              （先于 ScrollViewer 停靠，避免被名单覆盖）
+            -->
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
+                <Grid x:Name="ProgressHost" Visibility="Collapsed" Margin="0,0,0,6">
+                    <Border Height="4" CornerRadius="2"
+                            Background="{DynamicResource ProgressTrackBrush}"/>
+                    <Border x:Name="ProgressFill" Height="4" CornerRadius="2"
+                            Background="{DynamicResource AccentBrush}"
+                            HorizontalAlignment="Stretch"
+                            RenderTransformOrigin="0,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="ProgressScale" ScaleX="1"/>
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
+                <TextBlock Text="点按 ✕ 可暂时关闭，下次抽取后自动显示"
+                           FontSize="10" Foreground="#93A9BA"
+                           HorizontalAlignment="Center" Margin="0,1,0,0"/>
+            </StackPanel>
+
+            <ScrollViewer x:Name="ListScroll"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          MaxHeight="540"
+                          Margin="0,0,0,6">
+                <ItemsControl x:Name="ResultList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,2" Padding="8,6" CornerRadius="9"
+                                    Background="{DynamicResource RowBackgroundBrush}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="12" Height="12" CornerRadius="6"
+                                            Background="{Binding BadgeBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="13" Foreground="#22384C"
+                                               Margin="9,0,0,0" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</Window>

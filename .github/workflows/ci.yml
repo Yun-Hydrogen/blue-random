@@ -2,31 +2,21 @@
 #  Workflow: CI Build (标准持续集成构建)
 #
 #  触发条件：
-#    - 自动触发：main / NEXT / NEXT-Dev / neo-dev 等分支的 push 与 pull_request
-#    - 手动触发：workflow_dispatch (支持手动验证 CI 流程)
+#    - 自动触发：push 事件（任意分支推送自动触发）与 pull_request
+#    - 手动触发：workflow_dispatch (支持手动触发验证构建)
 #  职责：
 #    - 自动编译 Vue 3 前端静态产物 (Vite)
-#    - 执行 xUnit 单元测试保障代码质量
-#    - 编译并输出单文件独立版 Windows 构建产物
-#    - 上传构建 artifact 供下载测试，绝不自动发布 Release
+#    - 还原 .NET 解决方案并执行 xUnit 单元测试保障质量
+#    - 编译并输出单文件独立版 Windows 构建产物 (.NET 10 / win-x64)
+#    - 自动上传构建产物 (Artifact) 输出结果供下载测试
 # ============================================================
-name: CI Build (Windows)
+name: CI Build
 
 on:
   push:
     branches:
-      - main
-      - NEXT
-      - NEXT-Dev
-      - neo
-      - neo-dev
+      - '**'
   pull_request:
-    branches:
-      - main
-      - NEXT
-      - NEXT-Dev
-      - neo
-      - neo-dev
   workflow_dispatch:
 
 permissions:
@@ -71,18 +61,23 @@ jobs:
           --self-contained true
           -o publish/ci
 
-      - name: Prepare Single-File CI Package
+      - name: Prepare CI Output
         shell: pwsh
         run: |
           $json = Get-Content package.json -Raw | ConvertFrom-Json
           $ver = $json.version
           $code = if ($json.codename) { $json.codename } else { "Dev" }
           New-Item -ItemType Directory -Force -Path publish\out | Out-Null
-          Copy-Item "publish\ci\BlueRandom.exe" "publish\out\BlueRandom-$code-v$ver-CI-win-x64.exe"
+          $targetExe = "publish\out\BlueRandom-$code-v$ver-CI-win-x64.exe"
+          Copy-Item "publish\ci\BlueRandom.exe" $targetExe
+          if (Test-Path changelog.md) {
+            Copy-Item "changelog.md" "publish\out\changelog.md"
+          }
+          Write-Host "CI Build Output prepared at $targetExe"
 
       - name: Upload CI Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BlueRandom-CI-Windows
-          path: publish/out/BlueRandom-*.exe
+          path: publish/out/*
           if-no-files-found: error

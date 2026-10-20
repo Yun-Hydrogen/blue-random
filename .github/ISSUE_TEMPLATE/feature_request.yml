@@ -1,0 +1,28 @@
+name: 💡 功能建议 
+description: 为蔚蓝点名提出新的功能想法、交互改进或体验优化建议
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您为蔚蓝点名提出宝贵建议！我们非常欢迎社区共同完善项目。
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 前置核对 (Checklist)
+      options:
+        - label: 我已更新到最新版本
+          required: true
+        - label: 我使用的是来自于 GitHub 的蔚蓝点名官方分发版本
+          required: true
+
+  - type: textarea
+    id: requirement
+    attributes:
+      label: 描述您的需求
+      description: 请详细描述您希望添加的功能、预期交互效果以及它能解决的问题或使用场景
+      placeholder: 请在此详细阐述您的功能需求与预期效果...
+    validations:
+      required: true

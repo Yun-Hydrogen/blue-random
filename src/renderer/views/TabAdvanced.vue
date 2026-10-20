@@ -218,7 +218,15 @@
         />
       </div>
       <div v-if="updateStatus" class="cfg-hint" :class="updateStatus">{{ updateTitle }}</div>
-      <div v-if="updateDetail" class="update-detail-text">{{ updateDetail }}</div>
+      <!-- 使用 rizui-md 简约只读模式读取 changelog.md -->
+      <div v-if="updateDetail" class="update-detail-md">
+        <rizui_md
+          :model-value="updateDetail"
+          readonly
+          height="auto"
+          :color="tabTheme"
+        />
+      </div>
       <!-- 无论是否有更新，均提供 GitHub Releases 跳转入口 -->
       <rizui_button 
         primary
@@ -272,7 +280,10 @@
 //  onMounted — 组件挂载完成后的生命周期钩子
 // ============================================================
 import { ref, reactive, computed, onMounted } from 'vue'
-import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, openURL } from 'riz-ui'
+import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, rizui_mdeditor, openURL } from 'riz-ui'
+
+/* 将 rizui_mdeditor 别名为 rizui_md 以支持简约 Markdown 组件使用 */
+const rizui_md = rizui_mdeditor
 
 /* Tab 主题色 */
 const tabTheme = '#aa88dd'
@@ -287,9 +298,7 @@ const props = defineProps({
    * admin — 高级设置对象
    * 包含管理员权限、计划任务、UIAccess 等高级配置
    * 常用字段：adminAutoStartPath, adminAutoStartTaskName,
-   *           adminAutoStartAdmin, uiAccessEnabled,
-   *           renderingBackend, disableDirectComposition,
-   *           disableHardwareAcceleration
+   *           adminAutoStartAdmin, uiAccessEnabled, requireAdminOnLaunch
    */
   admin: Object,
 
@@ -414,12 +423,7 @@ const adminAutoStartTaskName = computed({
  *
  * 执行流程：
  *   1. 关闭 Dialog（showResetDialog.value = false）
- *   2. emit('reset-config') → 父组件收到后执行实际重置逻辑（TODO）
- *
- * 注意：
- *   - 当前父组件的重置逻辑尚未实现（标记 TODO），emit 后仅关闭对话框。
- *   - 不要在此函数中直接修改 props.admin，
- *     重置逻辑应由父组件统一处理。
+ *   2. emit('reset-config') → 父组件收到后调用后端全量重置配置
  */
 
 /* showResetDialog — 控制重置确认对话框的显示/隐藏 */
@@ -435,6 +439,9 @@ const showTaskDialog = ref(false)
 const taskDialogTitle = ref('')
 const taskDialogMsg = ref('')
 
+/**
+ * 触发创建或更新开机自启 Windows 计划任务，并弹出反馈结果对话框。
+ */
 async function handleCreateTask() {
   try {
     const result = await window.configPanelApi?.createStartupTask({
@@ -503,11 +510,18 @@ const securityDialog = reactive({
   busy: false
 })
 
-/* 开关切换：关闭 → 开启（设置密码）；开启 → 关闭（验证当前密码） */
+/**
+ * 响应密码保护开关切换事件。
+ * @param {boolean} on - 目标状态
+ */
 function onSecurityToggle(on) {
   openSecurityDialog(on ? 'enable' : 'disable')
 }
 
+/**
+ * 打开安全管理对话框（支持 'enable', 'change', 'disable' 模式）。
+ * @param {'enable'|'change'|'disable'} mode - 操作模式
+ */
 function openSecurityDialog(mode) {
   securityDialog.mode = mode
   securityDialog.title = mode === 'enable' ? '开启密码保护'
@@ -519,6 +533,9 @@ function openSecurityDialog(mode) {
   securityDialog.show = true
 }
 
+/**
+ * 提交安全管理操作（设置、更改或取消密码）。
+ */
 async function confirmSecurity() {
   if (securityDialog.busy) return
   const { mode, oldPwd, newPwd, confirmPwd } = securityDialog
@@ -650,6 +667,14 @@ async function confirmSecurity() {
   color: #888;
   white-space: pre-wrap;
   margin-top: 4px;
+}
+
+/* 更新日志 Markdown 简约只读渲染容器 */
+.update-detail-md {
+  margin-top: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 /* =================================================================

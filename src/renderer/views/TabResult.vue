@@ -7,13 +7,13 @@
 ================================================================================
   一、功能概述
 ================================================================================
-  配置抽取结果浮窗的外观、音效及联动功能。包含三张卡片：
+  配置抽取结果浮窗的外观与音效。包含三张卡片：
 
     卡片         | 功能
     ─────────────┼──────────────────────────────────────────
     浮窗外观     | 背景/边框颜色、透明度、装饰角色显示开关
+    结果暂留浮窗 | 抽取结束后在屏幕右上角保留本次结果，可手动关闭
     音效控制     | 抽取音效开关与音量；背景音乐上传（customs）与开关/音量/起始位置/淡入淡出
-    联动         | ClassIsland 播报（暂未实现，notReady 遮罩）
 
   数据流：父组件 ConfigPanel 通过 :pickResult 传入配置对象，
           本组件通过 $emit('update:pickResult', ...) 上报修改。
@@ -30,7 +30,7 @@
 ================================================================================
   三、依赖
 ================================================================================
-  riz-ui 组件：rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button, NotReadyOverlay
+  riz-ui 组件：rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button
   Vue API：computed, ref, watch, onMounted, onBeforeUnmount
 
 ================================================================================
@@ -42,7 +42,7 @@
     - 配置：pickResultDialog.bgmCustomId 只存引用，不内嵌音频数据
     - 时间轴：max 跟随音乐实际时长（bgmDuration），起始位置超限自动回退 0
     - 未上传 BGM 时：播放开关/音量/起始位置/淡入淡出全部禁用，并提示先上传
-    - 播放：PickResult.vue 通过 pick-result:get-config 由主进程解析为 bgmDataUrl
+    - 播放：DCompResultWindow 从 ConfigCache 读取 custom id，经 CustomsStore 解析为音频数据
 
 ================================================================================
   五、更新记录
@@ -80,17 +80,52 @@
       <rizui_cfgrow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明">
         <rizui_slider :model-value="opacityPercent" :min="10" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResult',{...pickResult,panelOpacity:$event/100})" />
       </rizui_cfgrow>
-      <!-- 装饰角色开关 -->
-      <rizui_cfgrow label="结果浮窗顶部装饰" hint="结果浮窗顶部是否显示小阿罗娜&小普拉娜两小只">
-        <rizui_switch :model-value="pickResult.showDeco !== false" :color="tabTheme" @update:model-value="$emit('update:pickResult',{...pickResult,showDeco:$event})" />
-      </rizui_cfgrow>
-      <rizui_cfgrow label="" hint="" v-if="pickResult.showDeco == true" stack>
-      <img :src="resolveAssetUrl('/image/Arona_Plana.png')" style="margin:auto; height: 66px; display: block;"/>  
-      </rizui_cfgrow>  
+      <rizui_infobox 
+        type="error"
+        text="由于性能优化，我们已移除了普拉娜&阿罗娜两小只"
+      />
     </rizui_card>
 
     <!--
-      二、音效控制
+      二、结果暂留浮窗
+      抽取结束后在屏幕右上角保留本次结果
+    -->
+    <rizui_card title="结果暂留浮窗" desc="抽取结束后在屏幕右上角保留本次结果" icon="fa-solid fa-thumbtack">
+      <rizui_cfgrow label="启用结果暂留浮窗" hint="开启后，抽取结束会在屏幕右上角显示本次抽取结果；点按浮窗上的 ✕ 可暂时关闭">
+        <rizui_switch
+          :model-value="pickResult.showLastResult === true"
+          :color="tabTheme"
+          @update:model-value="$emit('update:pickResult',{...pickResult,showLastResult:$event})"
+        />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="浮窗背景颜色" hint="结果暂留浮窗的整体底色" :disabled="!pickResult.showLastResult">
+        <rizui_colorpicker v-model="pickResult.lastResultBgColor" :color="tabTheme" teleport=".config-left" />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="浮窗边框颜色" hint="结果暂留浮窗的外框描边颜色" :disabled="!pickResult.showLastResult">
+        <rizui_colorpicker v-model="pickResult.lastResultBorderColor" :color="tabTheme" teleport=".config-left" />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明" :disabled="!pickResult.showLastResult">
+        <rizui_slider
+          :model-value="lastResultOpacityPercent"
+          :min="10" :max="100"
+          :color="tabTheme" display="%"
+          @update:model-value="$emit('update:pickResult',{...pickResult,lastResultOpacity:$event/100})"
+        />
+      </rizui_cfgrow>
+      <rizui_cfgrow label="自动关闭时长" hint="0 表示不自动关闭；大于 0 时浮窗底部显示随时间收缩的进度条" :disabled="!pickResult.showLastResult">
+        <rizui_slider
+          :model-value="pickResult.lastResultAutoCloseSeconds ?? 0"
+          :min="0" :max="100" :step="1"
+          :color="tabTheme"
+          :display-value="autoCloseDisplay"
+          @update:model-value="$emit('update:pickResult',{...pickResult,lastResultAutoCloseSeconds:$event})"
+        />
+      </rizui_cfgrow>
+      <rizui_infobox text="暂留浮窗会在下一次抽取开始时自动隐藏，抽取结束后从屏幕右缘滑入重新显示；关闭开关会立即滑出隐藏。自动关闭进度条从每次显示时开始计时。" />
+    </rizui_card>
+
+    <!--
+      三、音效控制
       抽取音效 / BGM 的开关、音量、时间参数
     -->
     <rizui_card title="音效控制" desc="抽取时的音频反馈设置" icon="fa-solid fa-music">
@@ -148,18 +183,6 @@
         <rizui_slider :model-value="pickResult.bgmFadeDuration || 1.5" :min="0.5" :max="5" :step="0.1" :color="tabTheme" :display-value="(pickResult.bgmFadeDuration || 1.5).toFixed(1) + 's'" @update:model-value="$emit('update:pickResult',{...pickResult,bgmFadeDuration:$event})" />
       </rizui_cfgrow>
     </rizui_card>
-
-    <!--
-      三、联动
-      与其他桌面软件的集成功能
-    -->
-    <rizui_card title="联动" desc="与其他软件的联动功能" icon="fa-solid fa-link">
-      <!-- notReady：功能未实现，遮罩自动覆盖（rizui_cfgrow 无 notReady 属性，手动叠加遮罩） -->
-      <rizui_cfgrow label="ClassIsland 联动播报" hint="将抽取结果播报到 ClassIsland" stack style="position: relative; overflow: hidden;">
-        <rizui_switch :model-value="false" :color="tabTheme" disabled />
-        <NotReadyOverlay text="等待实现" />
-      </rizui_cfgrow>
-    </rizui_card>
   </div>
 </template>
 
@@ -172,7 +195,7 @@
  *  4. formatTime        — 秒数 → MM:SS 格式化
  */
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button, NotReadyOverlay, rizui_infobox } from 'riz-ui'
+import { rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button, rizui_infobox } from 'riz-ui'
 import { resolveAssetUrl } from '@/utils/asset'
 
 const props = defineProps({ pickResult: Object })
@@ -187,9 +210,21 @@ const tabTheme = '#55cc99'
  */
 const opacityPercent = computed(() => Math.round((props.pickResult.panelOpacity || 0.9) * 100))
 
-/*
- *  秒数 → MM:SS 格式化
- *  用于 BGM 起始位置 hint 的动态显示
+/* 结果暂留浮窗透明度：config 存 0-1，UI 显示 10-100% */
+const lastResultOpacityPercent = computed(() =>
+  Math.round((props.pickResult.lastResultOpacity ?? 0.9) * 100)
+)
+
+/* 自动关闭时长显示：0 表示不自动关闭 */
+const autoCloseDisplay = computed(() => {
+  const seconds = Number(props.pickResult.lastResultAutoCloseSeconds) || 0
+  return seconds <= 0 ? '不自动关闭' : `${seconds}s`
+})
+
+/**
+ * 将秒数格式化为分秒展示格式 (MM:SS)。
+ * @param {number} sec - 秒数
+ * @returns {string} 格式化时间字符串
  */
 function formatTime(sec) {
   const s = Math.max(0, Math.round(sec || 0))
@@ -238,9 +273,8 @@ const playMusicHint = computed(() => hasBgm.value
   ? '抽取时播放完整的背景音乐'
   : '请先上传背景音乐后才能启用')
 
-/*
- * 按 bgmCustomId 从 customs/ 拉取 BGM 信息（文件名、时长），并缓存试听 data URL。
- * 在组件挂载时与 bgmCustomId 变化时调用；若起始位置超过新时长则回退到 0。
+/**
+ * 按 bgmCustomId 从 customs/ 拉取 BGM 元数据，并缓存试听 data URL。
  */
 async function loadBgmInfo() {
   const id = props.pickResult.bgmCustomId
@@ -282,9 +316,10 @@ onMounted(() => {
 watch(() => props.pickResult.bgmCustomId, () => { loadBgmInfo() })
 watch(() => props.pickResult.gachaSoundCustomId, () => { loadGachaInfo() })
 
-/*
- * 用 HTMLAudioElement 探测音频：可解码则返回时长（秒），失败 reject。
- * 这是上传时的“文件合法性校验”。
+/**
+ * 利用 HTMLAudioElement 探针探测音频时长与可解码性。
+ * @param {string} dataUrl - 音频 Data URL
+ * @returns {Promise<{duration: number}>}
  */
 function probeAudio(dataUrl) {
   return new Promise((resolve, reject) => {
@@ -300,12 +335,9 @@ function probeAudio(dataUrl) {
   })
 }
 
-/*
- * 处理背景音乐文件选择：
- *   1. 扩展名/类型预检（音频白名单）
- *   2. HTMLAudioElement 校验可解码性并获取时长（probeAudio）
- *   3. 暂存到主进程内存（saveCustomStaged，不落盘；点击“应用”时才写入 customs/）
- *   4. emit bgmCustomId（staged 引用）；时间轴随之同步到音乐时长
+/**
+ * 处理背景音乐文件选择：格式校验、时长解析与内存暂存。
+ * @param {Event} e - 文件变更事件
  */
 async function handleBgmPick(e) {
   const file = e.target.files[0]
@@ -358,7 +390,9 @@ async function handleBgmPick(e) {
   reader.readAsDataURL(file)
 }
 
-/* 移除背景音乐：清空引用并关闭播放开关；旧资源在“应用”时由主进程删除 */
+/**
+ * 移除背景音乐关联并重置播放状态。
+ */
 function removeBgm() {
   stopPreview()
   bgmInfo.value = null
@@ -366,7 +400,9 @@ function removeBgm() {
   emit('update:pickResult', { ...props.pickResult, bgmCustomId: '', playMusic: false })
 }
 
-/* 试听：从 customs 加载的 data URL 播放，从当前起始位置开始，音量跟随配置 */
+/**
+ * 切换背景音乐试听回放。
+ */
 async function previewBgm() {
   if (previewPlaying.value) { stopPreview(); return }
   if (!props.pickResult.bgmCustomId) return
@@ -411,7 +447,9 @@ const playGachaHint = computed(() => hasGachaSound.value
   ? '抽取时播放短促的提示音'
   : '请先上传抽取音效后才能启用')
 
-/* 按 gachaSoundCustomId 从 customs/ 拉取抽取音效信息并缓存试听 data URL */
+/**
+ * 按 gachaSoundCustomId 从 customs/ 拉取抽取音效信息并缓存试听 data URL。
+ */
 async function loadGachaInfo() {
   const id = props.pickResult.gachaSoundCustomId
   if (!id) { gachaInfo.value = null; gachaPreviewUrl.value = ''; return }
@@ -430,12 +468,9 @@ async function loadGachaInfo() {
   }
 }
 
-/*
- * 处理抽取音效文件选择：
- *   1. 扩展名/类型预检（音频白名单）
- *   2. probeAudio 校验可解码性
- *   3. 暂存到主进程内存（saveCustomStaged，不落盘；“应用”时才写入 customs/）
- *   4. emit gachaSoundCustomId（staged 引用）
+/**
+ * 处理抽取音效文件选择与暂存。
+ * @param {Event} e - 文件变更事件
  */
 async function handleGachaPick(e) {
   const file = e.target.files[0]
@@ -482,7 +517,9 @@ async function handleGachaPick(e) {
   reader.readAsDataURL(file)
 }
 
-/* 移除抽取音效：清空引用并关闭播放开关；旧资源在“应用”时由主进程删除 */
+/**
+ * 移除抽取音效并清空播放状态。
+ */
 function removeGachaSound() {
   stopGachaPreview()
   gachaInfo.value = null
@@ -490,7 +527,9 @@ function removeGachaSound() {
   emit('update:pickResult', { ...props.pickResult, gachaSoundCustomId: '', defaultPlayGachaSound: false })
 }
 
-/* 试听：从 customs 加载的 data URL 播放，音量跟随配置 */
+/**
+ * 试听自定义抽取音效。
+ */
 async function previewGachaSound() {
   if (gachaPreviewPlaying.value) { stopGachaPreview(); return }
   if (!props.pickResult.gachaSoundCustomId) return
@@ -507,6 +546,9 @@ async function previewGachaSound() {
   } catch { /* 忽略音频加载错误 */ }
 }
 
+/**
+ * 停止抽取音效试听回放。
+ */
 function stopGachaPreview() {
   const audio = gachaPreviewAudio.value
   if (audio) {
@@ -517,6 +559,9 @@ function stopGachaPreview() {
   gachaPreviewPlaying.value = false
 }
 
+/**
+ * 停止背景音乐试听回放。
+ */
 function stopPreview() {
   const audio = previewAudio.value
   if (audio) {

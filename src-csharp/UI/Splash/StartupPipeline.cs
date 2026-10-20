@@ -1,3 +1,27 @@
+// ============================================================================
+//  File: StartupPipeline.cs
+//  Project: BlueRandom (WPF Native)
+//  Description:
+//    软件启动状态机流水线 (Startup Pipeline)。
+//
+//  Pipeline Execution Sequence:
+//    Stage 0 (0% - 10%): 引导与日志
+//      - 初始化 AppLogger 落盘与多级色彩控制台；
+//    Stage 1 (15% - 35%): 权限仲裁与提权自愈
+//      - 预读轻量配置，校验管理员 (RequireAdminOnLaunch) 与 UIAccess (uiaccess.dll) 状态；
+//      - 执行防死循环环路检测，若需要提权则自拉起并安全退出当前父进程；
+//    Stage 2 (40% - 70%): 配置装载与协议迁移
+//      - 校验主配置文件，若协议不符执行自动双向迁移并通知用户；
+//      - 检验并同步班级列表 (ClassManagerService) 与花名册；若损坏提供降级恢复对话框；
+//    Stage 3 (75% - 80%): 素材全内存加载与预热
+//      - 调用 ResourceCache.Preload 加载私有字体、高分信封位图与音频流；
+//    Stage 4 (80% - 95%): 核心调度器与总线挂载
+//      - 启动 IpcBroker 订阅中枢与 BackendScheduler 守护任务；
+//      - 通过 WindowManager 唤醒各独立 STA 线程与 WebView2 ApplicationIdle 预热；
+//    Stage 5 (95% - 100%): 完成过渡
+//      - 进度推进至 100%，触发 Splash 渐变离场，控制权无缝交还核心桌面总线。
+// ============================================================================
+
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -12,11 +36,17 @@ using BlueRandom.Services;
 namespace BlueRandom.UI.Splash;
 
 /// <summary>
-/// 软件启动流水线 (Startup Pipeline)
-/// 严格执行 Stage 0 至 Stage 5 的原子初始化与自愈校验
+/// 软件启动流水线 (Startup Pipeline)。
+/// 严格执行 Stage 0 至 Stage 5 的原子初始化与自愈校验。
 /// </summary>
 public static class StartupPipeline
 {
+    /// <summary>
+    /// 异步驱动六阶段启动流水线，实时调度推进启动窗口的进度条并移交主控权。
+    /// </summary>
+    /// <param name="splash">启动动画宿主窗口实例。</param>
+    /// <param name="args">应用程序命令行入参（用于提权环路判定）。</param>
+    /// <returns>若成功完成启动返回 true；若触发提权或用户取消则返回 false。</returns>
     public static async Task<bool> RunAsync(SplashWindow splash, string[] args)
     {
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -100,6 +130,12 @@ public static class StartupPipeline
             AppLogger.Info("Pipeline", $"配置已成功注入 ConfigCache (协议代号: {config.ProtocolVersion})，候选学生数: {config.StudentList.Count}");
             ClassManagerService.EnsureInitialized(ConfigCache.Current);
             AppLogger.Info("Pipeline", $"配置与班级数据已成功装载，候选学生数: {ConfigCache.Current.StudentList.Count}，当前班级: {ConfigCache.Current.ActiveClassId}");
+
+            // 检查相同用途自定义资源，默认只保留最新一个并装载
+            splash.UpdateProgress(50, "正在检查并整理多媒体自定义资源...");
+            await Task.Delay(100);
+            CustomsStore.ConsolidateAndBindLatestResources(ConfigCache.Current);
+
             splash.UpdateProgress(55, "配置文件初始化完成！");
         }
         catch (Exception ex)

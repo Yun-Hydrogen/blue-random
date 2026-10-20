@@ -1,3 +1,11 @@
+// ==============================================================================
+// 文件: TrayService.cs
+// 命名空间: BlueRandom.Services
+// 作用: 原生 Windows 任务栏通知区域（系统托盘）服务。
+//       基于 Win32 核心 API（Shell_NotifyIcon、NOTIFYICONDATA、HwndSource 隐藏消息接收桩），
+//       在独立 STA 后台线程中运行，并呈现基于 WPF 纯手工定制的 Fluent 现代圆角微阴影右键上下文菜单。
+// ==============================================================================
+
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -16,8 +24,8 @@ using BlueRandom.Core.Logging;
 namespace BlueRandom.Services;
 
 /// <summary>
-/// 原生系统托盘服务 (Pure Win32 Shell_NotifyIcon + 现代化精致 Fluent ContextMenu)
-/// 独立 STA 线程运行，自动锚定 Default 桌面，零依赖且 100% 稳定
+/// 原生系统托盘服务 (Pure Win32 Shell_NotifyIcon + 现代化精致 Fluent ContextMenu)。
+/// 独立 STA 线程运行，自动锚定 Default 桌面，零外部三方依赖且 100% 稳定运行。
 /// </summary>
 public static class TrayService
 {
@@ -81,6 +89,10 @@ public static class TrayService
     private static ContextMenu? _contextMenu;
     private static bool _isCreated = false;
 
+    /// <summary>
+    /// 初始化系统托盘服务。
+    /// 启动独立的后台 STA 线程，挂载 Default 交互式桌面环境并开启 WPF Dispatcher 消息泵。
+    /// </summary>
     public static void Initialize()
     {
         _trayThread = new Thread(() =>
@@ -118,6 +130,9 @@ public static class TrayService
         _trayThread.Start();
     }
 
+    /// <summary>
+    /// 在 STA 线程上创建 Win32 消息宿主隐藏窗体（HwndSource）、提取应用图标并调用 Shell_NotifyIcon 挂载托盘。
+    /// </summary>
     private static void CreateTraySinkAndIcon()
     {
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -192,6 +207,11 @@ public static class TrayService
         }
     }
 
+    /// <summary>
+    /// 构建现代化精美托盘右键上下文菜单。
+    /// 基于纯代码装配 Fluent 样式 ControlTemplate、圆角投影、品牌渐变标头条以及各动作项。
+    /// </summary>
+    /// <returns>已装配的 WPF ContextMenu 实例。</returns>
     private static ContextMenu BuildModernContextMenu()
     {
         // 1. 自定义 ContextMenu 外观容器 (圆角、柔和阴影、纯白背景)
@@ -322,6 +342,15 @@ public static class TrayService
         return menu;
     }
 
+    /// <summary>
+    /// 创建具有统一 Fluent 视觉规范的菜单项。
+    /// 包含图标字形、标题排版、右侧快捷键对齐与鼠标悬停变色触发器。
+    /// </summary>
+    /// <param name="title">菜单项标题文本。</param>
+    /// <param name="iconGlyph">Emoji 或图标字形。</param>
+    /// <param name="shortcut">提示快捷键。</param>
+    /// <param name="onClick">点击时执行的业务闭包回调。</param>
+    /// <returns>已装配样式的 MenuItem 实例。</returns>
     private static MenuItem CreateStyledMenuItem(string title, string iconGlyph, string shortcut, Action onClick)
     {
         var item = new MenuItem
@@ -402,6 +431,10 @@ public static class TrayService
         return item;
     }
 
+    /// <summary>
+    /// 创建高 DPI 自适应的浅色单像素微分割线。
+    /// </summary>
+    /// <returns>已应用样式的 Separator 实例。</returns>
     private static Separator CreateStyledSeparator()
     {
         var sep = new Separator
@@ -418,6 +451,15 @@ public static class TrayService
         return sep;
     }
 
+    /// <summary>
+    /// Win32 消息循环挂钩函数（WndProc）。
+    /// <para>
+    /// 消息路由：
+    /// 1. 响应 WM_TRAYICON：提取 lParam 中的鼠标事件；
+    /// 2. WM_RBUTTONUP：调用 SetForegroundWindow 抢占前台，在光标点弹出 ContextMenu，并发送 WM_NULL 确保点击窗外时菜单能正常失去焦点自动隐藏；
+    /// 3. WM_LBUTTONUP / WM_LBUTTONDBLCLK：直接唤起配置面板。
+    /// </para>
+    /// </summary>
     private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (msg == WM_TRAYICON)
@@ -443,6 +485,10 @@ public static class TrayService
         return IntPtr.Zero;
     }
 
+    /// <summary>
+    /// 优雅释放托盘所有原生句柄并关闭 STA 消息泵。
+    /// 调用 Shell_NotifyIcon(NIM_DELETE) 移除图标，销毁 HwndSource 隐藏桩并终止 Dispatcher 线程。
+    /// </summary>
     public static void Dispose()
     {
         if (_trayDispatcher != null && !_trayDispatcher.HasShutdownStarted)

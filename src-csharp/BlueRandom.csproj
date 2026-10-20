@@ -30,13 +30,16 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3124.44" />
+    <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DirectComposition" Version="3.8.3" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <InternalsVisibleTo Include="BlueRandom.Tests" />
   </ItemGroup>
 
   <!-- 内嵌资源：将 UIAccess、公共素材以及 Vite 编译后的前端静态页面完整内嵌到单文件二进制中 -->
   <ItemGroup>
-    <EmbeddedResource Include="..\uiaccess.dll">
+    <EmbeddedResource Include="..\third_party\uiaccess.dll">
       <LogicalName>BlueRandom.uiaccess.dll</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\public\**\*">
@@ -47,6 +50,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="..\package.json">
       <LogicalName>package.json</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\changelog.md">
+      <LogicalName>changelog.md</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

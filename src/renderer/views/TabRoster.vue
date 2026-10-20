@@ -224,6 +224,13 @@ const deleteDialog = reactive({ show: false, id: '', name: '' })
 
 /* toast 通知（rizui_toast） */
 const toast = reactive({ show: false, type: 'info', title: '', hint: '' })
+
+/**
+ * 弹出浮动 Toast 气泡通知
+ * @param {'info' | 'warn' | 'error' | 'success'} type - 气泡类型
+ * @param {string} title - 提示标题
+ * @param {string} [hint=''] - 详细补充说明信息
+ */
 function showToast(type, title, hint = '') {
   toast.type = type
   toast.title = title
@@ -233,8 +240,13 @@ function showToast(type, title, hint = '') {
 
 const classOptions = computed(() => classes.value.map(c => ({ value: c.classId, label: c.name })))
 
-/* 将指定班级设为当前班级（仅更新草稿与编辑器，落盘由“应用”完成）。
-   注意：仅在能定位到班级时才覆盖名单，避免无班级时误清空编辑内容。 */
+/**
+ * 将指定班级设置为当前处于编辑态的活动班级
+ * @description
+ * 仅更新内存中的活动班级 ID 与学生草稿，实际的物理磁盘落盘由宿主“应用”或“保存”流程统一调度。
+ * 关键约束：仅在能够成功索引到对应班级实体时才覆盖当前 studentList，防止切换无效 ID 时清空正在编辑的有效数据。
+ * @param {string} classId - 目标班级唯一标识符
+ */
 function applyActiveClass(classId) {
   activeClassId.value = classId
   const cls = classes.value.find(c => c.classId === classId)
@@ -242,10 +254,11 @@ function applyActiveClass(classId) {
   if (cls) emit('update:studentList', cls.studentList)
 }
 
-/*
- * 从磁盘加载班级列表（即“刷新”）。
- * 尽量保持当前班级；若其已不存在则回退到第一个班级。
- * 返回 boolean 表示是否成功（供调用方决定是否弹错误 toast）。
+/**
+ * 从本地磁盘配置系统重新加载所有班级列表（刷新状态）
+ * @description
+ * 优先保留当前选中的活动班级；若旧班级已被外部删除则安全降级回退至班级列表的第一项。
+ * @returns {Promise<boolean>} 是否加载成功（供上层判断是否需要弹窗提示异常）
  */
 async function loadClasses() {
   classLoading.value = true
@@ -271,16 +284,27 @@ watch(() => props.saveVersion, () => {
   if (props.saveVersion > 0) loadClasses()
 })
 
+/**
+ * 响应下拉菜单切换当前班级
+ * @param {string} classId - 用户选择的目标班级 ID
+ */
 function handleSwitchClass(classId) {
   if (!classId || classId === activeClassId.value) return
   applyActiveClass(classId)
 }
 
+/**
+ * 手动触发班级列表磁盘重载
+ */
 async function handleRefreshClasses() {
   const ok = await loadClasses()
   if (!ok) showToast('error', '刷新失败', '无法读取班级列表')
 }
 
+/**
+ * 打开班级添加或重命名弹窗
+ * @param {'add' | 'rename'} mode - 对话框模式
+ */
 function openClassDialog(mode) {
   classDialog.mode = mode
   classDialog.title = mode === 'add' ? '添加班级' : '重命名班级'
@@ -290,6 +314,11 @@ function openClassDialog(mode) {
   classDialog.show = true
 }
 
+/**
+ * 提交并确认班级的新增或重命名对话框操作
+ * @description
+ * 调用原生桥接 API 完成磁盘持久化创建或重命名，成功后刷新班级缓存并自动定位激活。
+ */
 async function confirmClassDialog() {
   const name = classDialog.name.trim()
   if (!name) return
@@ -319,6 +348,9 @@ async function confirmClassDialog() {
   classDialog.show = false
 }
 
+/**
+ * 打开删除当前选中班级的二次确认对话框
+ */
 function handleDeleteClass() {
   if (!activeClassId.value) return
   const cls = classes.value.find(c => c.classId === activeClassId.value)
@@ -327,6 +359,11 @@ function handleDeleteClass() {
   deleteDialog.show = true
 }
 
+/**
+ * 确认并执行删除当前指定班级
+ * @description
+ * 提交原生桥接 API 销毁对应班级文件，成功后自动回退并重载剩余班级列表。
+ */
 async function confirmDeleteClass() {
   const name = deleteDialog.name
   try {
@@ -365,10 +402,12 @@ const rawListText = ref('')
  */
 let syncingFromList = false
 
-/*
- *  把 textarea 文本解析成学生数组，并通知父组件
- *  解析规则：先按换行分割，每行再按逗号分割，去空白、去重
- *  保留已有学生的权重值（通过 name 匹配），新学生默认 weight=1.0
+/**
+ * 将文本框 (textarea) 中的纯文本解析为结构化学生数组，并通知父组件
+ * @description
+ * 1. 按换行分割提取，单行内再按逗号切分，自动清除空白字符并去重。
+ * 2. 匹配已有学生姓名，保留既有设置的权重值与信封类型；新录入学生默认赋值 weight=1.0、letterColor='rainbow'。
+ * 3. 使用 syncingFromList 与 setTimeout(0) 构建互斥防抖屏障，彻底阻断与外部 watch 的循环触发死锁。
  */
 function syncTextToList() {
   syncingFromList = true
@@ -383,9 +422,10 @@ function syncTextToList() {
   setTimeout(() => { syncingFromList = false }, 0)
 }
 
-/*
- *  把学生数组转回 textarea 文本（每行一个名字）
- *  调用时机：外部数据变化时（watch 触发）、删除学生后
+/**
+ * 将结构化学生数组逆向转换为换行分隔的纯文本字符串，同步刷新 textarea
+ * @description
+ * 外部配置重载或删除名单成员后触发，保持视图与状态模型的完全一致。
  */
 function syncListToText() {
   rawListText.value = props.studentList.map(s => s.name).join('\n')
@@ -395,10 +435,12 @@ function syncListToText() {
 //  2. 文件导入：读取用户选择的 txt/csv 文件
 // ================================================================
 
-/*
- *  处理文件选择器的 change 事件
- *  用 FileReader 读取文件内容，填入 textarea，触发同步
- *  注意：读取完成后要把 input.value 清空，否则再次选择同一文件不会触发 change
+/**
+ * 响应学生名单文件上传并解析文件内容
+ * @description
+ * 经由 HTML5 FileReader 以 UTF-8 编码读取本地文本文件，转译为换行名单后灌入文本框并触发数据同步。
+ * 读取完成后重置 input.value，确保后续重选相同文件名时依然能正确触发 change 事件。
+ * @param {Event} e - 文件选择框的 change 事件对象
  */
 function handleFileUpload(e) {
   const file = e.target.files[0]
@@ -416,11 +458,10 @@ function handleFileUpload(e) {
 //  3. 权重操作：增删改查
 // ================================================================
 
-/*
- *  修改单个学生的权重值
- *  参数 i: 学生在数组中的索引
- *  参数 e: input 事件对象，e.target.value 是滑条的当前值
- *  注意：必须创建新数组再 emit，Vue 的响应式依赖引用变化
+/**
+ * 修改指定索引学生的抽卡权重数值
+ * @param {number} i - 目标学生在名单数组中的索引下标
+ * @param {number} val - 设定的新权重数值 (0.0 ~ 5.0)
  */
 function setWeight(i, val) {
   const list = [...props.studentList]
@@ -435,16 +476,20 @@ const letterColorOptions = [
   { value: 'blue', label: '蓝色信封' }
 ]
 
-/* 设置单个学生的信封颜色（抽卡浮窗中的信封按此显示） */
+/**
+ * 设置指定索引学生的开箱信封品质颜色
+ * @param {number} i - 目标学生在名单数组中的索引下标
+ * @param {'rainbow' | 'gold' | 'blue'} color - 信封颜色代码
+ */
 function setLetterColor(i, color) {
   const list = [...props.studentList]
   list[i] = { ...list[i], letterColor: color }
   emit('update:studentList', list)
 }
 
-/*
- *  删除指定索引的学生
- *  同时调用 syncListToText 更新 textarea，保持文本框与数组一致
+/**
+ * 从当前名单中移除指定索引的学生
+ * @param {number} i - 目标学生的索引下标
  */
 function removeStudent(i) {
   const list = [...props.studentList]
@@ -453,8 +498,8 @@ function removeStudent(i) {
   syncListToText()
 }
 
-/*
- *  将所有学生权重重置为 1.0
+/**
+ * 将当前名单中全部学生的权重一键重置为基准值 1.0
  */
 function resetWeights() {
   emit('update:studentList', props.studentList.map(s => ({ ...s, weight: 1.0 })))
@@ -469,11 +514,12 @@ function resetWeights() {
  */
 const totalWeight = computed(() => props.studentList.reduce((sum, s) => sum + (s.weight || 0), 0))
 
-/*
- *  计算单个学生在单次抽取中的被抽中概率
- *  公式：该学生权重 ÷ 总权重 × 100%
- *  返回格式：保留两位小数的百分比字符串，如 "12.50%"
- *  边界处理：总权重为 0 或该学生权重为 0 时返回 "0.00%"
+/**
+ * 计算单个学生在单次独立随机抽卡中的理论中签概率
+ * @description
+ * 经典轮盘赌概率模型：P_i = weight_i / sum(weights) * 100%。边界处若权重总和为 0 则安全返回 0.00%。
+ * @param {{ name: string, weight?: number }} s - 学生对象实体
+ * @returns {string} 格式化后的百分比字符串（保留两位小数，如 "12.50%"）
  */
 function studentProb(s) {
   const tw = totalWeight.value
@@ -506,10 +552,11 @@ watch(() => props.studentList, () => {
  */
 const studentRefs = {}
 
-/*
- *  点击芯片后平滑滚动到对应学生的权重行
- *  同时将该行背景高亮为 #66ccff，1.2 秒后恢复
- *  注意：如果该学生行内有权重概率显示(.weight-prob)，高亮时文字改为白色以确保可读性
+/**
+ * 点击预览芯片后平滑滚动到对应学生的权重编辑行
+ * @description
+ * 触发平滑居中滚动 (`scrollIntoView`)，并为目标行附加高亮动画背景 (`#66ccffbb`)，维持 1.2 秒后自动淡出还原。
+ * @param {number} i - 目标学生的数组索引
  */
 function scrollToStudent(i) {
   const el = studentRefs[i]

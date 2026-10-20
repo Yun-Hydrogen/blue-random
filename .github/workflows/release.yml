@@ -2,14 +2,14 @@
 #  Workflow: Release (手动触发生产发布)
 #
 #  触发条件：
-#    - 仅手动触发：workflow_dispatch (手动点击 Run workflow 触发)
+#    - 仅手动触发：workflow_dispatch (手动点击 Run workflow 触发发布)
 #  职责：
 #    - 读取 package.json 中的 codename (版本代号) 与 version (版本号)
-#    - 编译前端 Vite 静态产物
+#    - 读取并校验 changelog.md 内容作为 GitHub Release 的说明正文 (body_path)
+#    - 自动编译前端 Vite 静态产物
 #    - 执行全部 xUnit 自动化测试确保发布质量
 #    - 构建单文件独立版可执行文件 (.NET 10 / win-x64)
-#    - 按照「代号+版本号」格式生成标签、Release 标题与二进制文件名
-#    - 自动创建并发布 GitHub Release
+#    - 创建 GitHub Release，将可执行程序与 changelog.md 一并作为 Release 产物释放
 # ============================================================
 name: Release (Manual)
 
@@ -61,7 +61,7 @@ jobs:
       - name: Run Unit Tests
         run: dotnet test tests/BlueRandom.Tests/BlueRandom.Tests.csproj --configuration Release --verbosity normal
 
-      - name: Resolve Version and Codename
+      - name: Resolve Metadata and Validate Changelog
         id: meta
         shell: pwsh
         run: |
@@ -74,6 +74,13 @@ jobs:
           "codename=$code" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "tag_name=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "release_title=$title" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          if (-not (Test-Path changelog.md)) {
+            Write-Warning "changelog.md not found, creating placeholder."
+            "**[Version]** $ver`n**[codename]** $code" | Out-File -FilePath changelog.md -Encoding utf8
+          } else {
+            Write-Host "Read changelog.md successfully ($((Get-Item changelog.md).Length) bytes)"
+          }
           Write-Host "Resolved metadata: Codename=[$code], Version=[$ver], Tag=[$tag]"
 
       - name: Publish Single-File Standalone (win-x64)
@@ -84,7 +91,7 @@ jobs:
           --self-contained true
           -o publish/release
 
-      - name: Package Single-File Release
+      - name: Package Single-File Release and Changelog
         shell: pwsh
         run: |
           $code = "${{ steps.meta.outputs.codename }}"
@@ -92,21 +99,24 @@ jobs:
           New-Item -ItemType Directory -Force -Path publish\out | Out-Null
           $targetExe = "publish\out\BlueRandom-$code-v$ver-win-x64.exe"
           Copy-Item "publish\release\BlueRandom.exe" $targetExe
-          Write-Host "Prepared package: $targetExe"
+          Copy-Item "changelog.md" "publish\out\changelog.md"
+          Write-Host "Prepared package: $targetExe and changelog.md"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BlueRandom-${{ steps.meta.outputs.tag_name }}-Windows
-          path: publish/out/BlueRandom-*.exe
+          path: publish/out/*
           if-no-files-found: error
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release with Changelog
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag_name }}
           name: ${{ steps.meta.outputs.release_title }}
+          body_path: changelog.md
           draft: ${{ github.event.inputs.draft == 'true' }}
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
-          generate_release_notes: true
-          files: publish/out/BlueRandom-*.exe
+          files: |
+            publish/out/BlueRandom-*.exe
+            changelog.md

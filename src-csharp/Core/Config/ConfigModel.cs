@@ -1,3 +1,10 @@
+// ==============================================================================
+// 文件: ConfigModel.cs
+// 命名空间: BlueRandom.Core.Config
+// 作用: 定义应用配置的强类型对象模型（DTO），包含 YAML 与 JSON 序列化映射别名。
+//       覆盖学生数据、悬浮按钮样式、抽卡弹窗声效、管理员提权与 UIAccess 策略。
+// ==============================================================================
+
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using YamlDotNet.Serialization;
@@ -114,8 +121,27 @@ public class PickResultDialogConfig
     [YamlMember(Alias = "panelBorderColor")]
     public string PanelBorderColor { get; set; } = "#66ccff";
 
-    [YamlMember(Alias = "showDeco")]
-    public bool ShowDeco { get; set; } = true;
+    /// <summary>
+    /// 抽取结束后是否在屏幕右上角保留上一轮结果浮窗。
+    /// </summary>
+    [YamlMember(Alias = "showLastResult")]
+    public bool ShowLastResult { get; set; } = false;
+
+    /// <summary>结果暂留浮窗背景色。</summary>
+    [YamlMember(Alias = "lastResultBgColor")]
+    public string LastResultBgColor { get; set; } = "#ffffff";
+
+    /// <summary>结果暂留浮窗边框色。</summary>
+    [YamlMember(Alias = "lastResultBorderColor")]
+    public string LastResultBorderColor { get; set; } = "#66ccff";
+
+    /// <summary>结果暂留浮窗不透明度（0.1 ~ 1.0）。</summary>
+    [YamlMember(Alias = "lastResultOpacity")]
+    public double LastResultOpacity { get; set; } = 0.9;
+
+    /// <summary>结果暂留浮窗自动关闭时长（秒）；0 表示不自动关闭。</summary>
+    [YamlMember(Alias = "lastResultAutoCloseSeconds")]
+    public int LastResultAutoCloseSeconds { get; set; } = 0;
 }
 
 /// <summary>

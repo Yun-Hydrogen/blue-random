@@ -1,0 +1,58 @@
+name: 🐛 Bug 报告
+description: 提交程序运行中的崩溃、异常行为或显示错误
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您反馈问题！请在提交前确保已搜索既有 Issue，避免重复提问。
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 前置核对 (Checklist)
+      options:
+        - label: 我已更新到最新版本但问题仍然存在
+          required: true
+        - label: 我使用的是来自于 GitHub 的蔚蓝点名官方分发版本
+          required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: Windows 版本（winver 查看）
+      description: 请按 Win + R 快捷键，输入 winver 并回车，填写完整的系统版本号
+      placeholder: 例如：Windows 11 23H2 (OS 内部版本 22631.3007)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 请清晰、具体地描述您遇到的具体问题或异常现象
+      placeholder: 请在此详细描述发生了什么...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs-and-screenshots
+    attributes:
+      label: 日志及截图
+      description: 请提供运行日志（可从用户目录 `%UserProfile%/.blue random/log.txt` 中提取）或直接拖拽粘贴错误截图
+      placeholder: 粘贴相关日志片段，或拖拽截图文件至此处...
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: 复现步骤
+      description: 请详细列出重现该问题的具体操作步骤
+      placeholder: |
+        1. 启动应用...
+        2. 点击...
+        3. 发生异常...
+    validations:
+      required: true
