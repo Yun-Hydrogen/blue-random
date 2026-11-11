@@ -334,7 +334,7 @@ public static class TrayService
         menu.Items.Add(CreateStyledMenuItem("退出程序", "❌", "X", () =>
         {
             AppLogger.Info("Tray", "用户从托盘点击退出");
-            IpcBroker.Send(IpcMessage.Create(IpcAction.Dest, IpcModule.Ipc, "Destroy"));
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Destroy, IpcModule.Ipc, "Destroy"));
             Dispose();
             Environment.Exit(0);
         }));

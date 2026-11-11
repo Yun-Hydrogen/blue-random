@@ -46,7 +46,7 @@
   │  │ activeTab        │  │ draft.studentList│  │ fetchAppInfo()  │ │
   │  │ switchTab()      │  │ draft.admin      │  │ saveConfig()    │ │
   │  │ updateSlider()   │  │ draft.floating.. │  │ resetConfig()   │ │
-  │  │ sliderStyle      │  │ draft.pickResult │  │ checkUpdate()   │ │
+  │  │ sliderStyle      │  │ draft.pickResu.. │  │ checkUpdate()   │ │
   │  └─────────────────┘  └──────────────────┘  └─────────────────┘ │
   │                                                                   │
   │  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────┐ │

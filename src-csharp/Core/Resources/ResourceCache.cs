@@ -35,7 +35,7 @@ public static class ResourceCache
 
     private static readonly ConcurrentDictionary<string, BitmapImage> _images = new();
     private static readonly ConcurrentDictionary<string, byte[]> _audioBytes = new();
-    private static readonly ConcurrentDictionary<string, byte[]> _webuiAssets = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, byte[]> _webUiAssets = new(StringComparer.OrdinalIgnoreCase);
     private static FontFamily? _customFont;
 
     /// <summary>
@@ -191,7 +191,7 @@ public static class ResourceCache
     /// <para>
     /// 执行步骤：
     /// 0. 安全清除历史版本残留于磁盘 ~/.blue random/webui 的旧目录缓存，实现零磁盘静态污染；
-    /// 1. 将 Vite 构建产物（HTML/CSS/JS/SVG）全量灌入内存并发字典 _webuiAssets；
+    /// 1. 将 Vite 构建产物（HTML/CSS/JS/SVG）全量灌入内存并发字典 _webUiAssets；
     /// 2. 加载并注册 UI.ttf 字体；
     /// 3. 并行解码并冻结三色信封纹理、阿罗娜/普拉娜立绘、托盘图标；
     /// 4. 预载并缓存抽卡点击核心 WAV 音效。
@@ -277,7 +277,7 @@ public static class ResourceCache
             }
         }
 
-        AppLogger.Info("ResourceCache", $"ResCache 资源预热完成，已缓存 {_webuiAssets.Count} 个 WebUI 静态文件、{_images.Count} 张图片、{_audioBytes.Count} 个音频");
+        AppLogger.Info("ResourceCache", $"ResCache 资源预热完成，已缓存 {_webUiAssets.Count} 个 WebUI 静态文件、{_images.Count} 张图片、{_audioBytes.Count} 个音频");
     }
 
     /// <summary>
@@ -287,7 +287,7 @@ public static class ResourceCache
     /// <param name="baseDir">程序运行根目录。</param>
     private static void PreloadWebUiAssets(string baseDir)
     {
-        _webuiAssets.Clear();
+        _webUiAssets.Clear();
 
         string distDir = Path.Combine(baseDir, "dist");
         if (!Directory.Exists(distDir) || !File.Exists(Path.Combine(distDir, "index.html")))
@@ -310,9 +310,9 @@ public static class ResourceCache
                 foreach (string file in Directory.GetFiles(distDir, "*", SearchOption.AllDirectories))
                 {
                     string relPath = Path.GetRelativePath(distDir, file).Replace('\\', '/').TrimStart('/');
-                    _webuiAssets[relPath] = File.ReadAllBytes(file);
+                    _webUiAssets[relPath] = File.ReadAllBytes(file);
                 }
-                AppLogger.Info("ResourceCache", $"已向 ResCache 预热注入 {_webuiAssets.Count} 个 WebUI 前端资源 (来自本地 dist 目录)");
+                AppLogger.Info("ResourceCache", $"已向 ResCache 预热注入 {_webUiAssets.Count} 个 WebUI 前端资源 (来自本地 dist 目录)");
                 return;
             }
             catch (Exception ex)
@@ -335,11 +335,11 @@ public static class ResourceCache
                     {
                         using var ms = new MemoryStream();
                         stream.CopyTo(ms);
-                        _webuiAssets[relPath] = ms.ToArray();
+                        _webUiAssets[relPath] = ms.ToArray();
                     }
                 }
             }
-            AppLogger.Info("ResourceCache", $"已向 ResCache 预热注入 {_webuiAssets.Count} 个 WebUI 前端静态资源 (单文件嵌入资源，零磁盘释放)");
+            AppLogger.Info("ResourceCache", $"已向 ResCache 预热注入 {_webUiAssets.Count} 个 WebUI 前端静态资源 (单文件嵌入资源，零磁盘释放)");
         }
         catch (Exception ex)
         {
@@ -355,13 +355,13 @@ public static class ResourceCache
     /// <returns>资源二进制字节数组；若未命中则返回 null。</returns>
     public static byte[]? GetWebUiAsset(string relativePath)
     {
-        if (_webuiAssets.IsEmpty)
+        if (_webUiAssets.IsEmpty)
         {
             PreloadWebUiAssets(AppDomain.CurrentDomain.BaseDirectory);
         }
         string key = relativePath.Replace('\\', '/').TrimStart('/');
         if (string.IsNullOrEmpty(key)) key = "index.html";
-        return _webuiAssets.TryGetValue(key, out var bytes) ? bytes : null;
+        return _webUiAssets.TryGetValue(key, out var bytes) ? bytes : null;
     }
 
     /// <summary>

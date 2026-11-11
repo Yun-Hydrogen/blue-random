@@ -76,7 +76,7 @@ flowchart TD
 | 动作语义 | 符号 | 枚举值 | 设计意图 |
 | :--- | :---: | :---: | :--- |
 | **INIT** | `INIT` | `IpcAction.Init` | **生命周期初始化**。通知组件或模块完成就绪阶段的启动与预热。 |
-| **DEST** | `DEST` | `IpcAction.Dest` | **生命周期销毁**。指示窗口释放 HWND、销毁上下文、注销监听并安全关闭线程。 |
+| **DESTROY** | `DESTROY` | `IpcAction.Destroy` | **生命周期销毁**。指示窗口释放 HWND、销毁上下文、注销监听并安全关闭线程。 |
 | **GET**  | `GET`  | `IpcAction.Get`  | **主动控制下发**。由调度器向 UI 模块下达显隐、位移、热更等控制指令。 |
 | **POST** | `POST` | `IpcAction.Post` | **事件与交互上报**。由 UI 模块向调度器汇报用户操作（点击抽取、拖拽定位、关闭窗体等）。 |
 
@@ -85,12 +85,12 @@ flowchart TD
 ```csharp
 namespace BlueRandom.Core.Ipc;
 
-public enum IpcAction { Init, Dest, Get, Post }
+public enum IpcAction { Init, Destroy, Get, Post }
 public enum IpcModule { Ipc, Fcb, Frw, Cp, Lrw }
 
 public sealed class IpcMessage
 {
-    public IpcAction Action { get; init; }      // 动作语义: Init, Dest, Get, Post
+    public IpcAction Action { get; init; }      // 动作语义: Init, Destroy, Get, Post
     public IpcModule Module { get; init; }      // 目标/来源模块: Ipc, Fcb, Frw, Cp, Lrw
     public string Command { get; init; }        // 动作标识命令
     public object? Payload { get; init; }       // 强类型载荷数据
@@ -121,10 +121,10 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | **`PositionChanged`** | `POST` | FCB $\to$ 后端 | `FcbPositionPayload` | 悬浮球被拖拽松手后上报。包含 `MonitorNumber`、`PositionX`、`PositionY`。后端更新 `ConfigCache` 并触发 600ms 防抖磁盘保存。 |
 | **`HideWindow`** | `GET` | 后端 $\to$ FCB | `null` | 隐藏悬浮球（抽卡演播窗打开期间，防止悬浮球遮挡演播视线）。 |
 | **`ShowWindow`** | `GET` | 后端 $\to$ FCB | `null` | 恢复显示悬浮球，并调用 Win32 刷新置顶状态。 |
-| **`ApplyNewProp`** | `GET` | 后端 $\to$ FCB | `FloatingButtonConfig` | 外观属性热更新。实时重新计算几何弧形、缩放比例、边框色与图标。 |
+| **`ApplyProps`** | `GET` | 后端 $\to$ FCB | `FloatingButtonConfig` | 外观属性热更新。实时重新计算几何弧形、缩放比例、边框色与图标。 |
 | **`ApplyDefaultPickCount`** | `GET` | 后端 $\to$ FCB | `int` | 热更新人数选择器的默认抽取人数，范围由后端配置规范化为 1-10。 |
 | **`MoveNewPosition`** | `GET` | 后端 $\to$ FCB | `FcbPositionPayload` | 主动移动悬浮按钮到目标屏幕坐标并进行边界校正。 |
-| **`Destroy`** | `DEST` | 后端 $\to$ FCB | `null` | 关闭悬浮按钮窗口并释放线程。 |
+| **`Destroy`** | `DESTROY` | 后端 $\to$ FCB | `null` | 关闭悬浮按钮窗口并释放线程。 |
 
 #### 2.4.2 结果演播浮窗模块 (`IpcModule.Frw`)
 
@@ -132,8 +132,8 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | :--- | :---: | :---: | :--- | :--- |
 | **`ShowWindow`** | `GET` | 后端 $\to$ FRW | `FrwShowPayload` | 后端抽卡算法完成后下发。包含 `Amount` 和 `CalledStudents` 列表。FRW 淡入全屏遮罩、播放音效与 BGM、执行 15° 卡片倾斜与姓名逐个飞入弹跳动效。 |
 | **`WindowClosed`** | `POST` | FRW $\to$ 后端 | `List<CalledStudent>` | 演播窗口完成退场动画后上报本轮名单。后端缓存为“上一次抽取结果”，重置 `IsDrawing = false`，下发 `ShowWindow` 唤醒桌面悬浮球，并在开启结果暂留时显示 LRW。 |
-| **`ApplyNewProp`** | `GET` | 后端 $\to$ FRW | `PickResultDialogConfig` | 热更新演播窗外观、背景半透明度与音量配置。 |
-| **`Destroy`** | `DEST` | 后端 $\to$ FRW | `null` | 停止所有音视频播放，销毁演播窗口并释放线程。 |
+| **`ApplyProps`** | `GET` | 后端 $\to$ FRW | `PickResultDialogConfig` | 热更新演播窗外观、背景半透明度与音量配置。 |
+| **`Destroy`** | `DESTROY` | 后端 $\to$ FRW | `null` | 停止所有音视频播放，销毁演播窗口并释放线程。 |
 
 #### 2.4.3 结果暂留浮窗模块 (`IpcModule.Lrw`)
 
@@ -141,8 +141,8 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | :--- | :---: | :---: | :--- | :--- |
 | **`ShowWindow`** | `GET` | 后端 $\to$ LRW | `LrwShowPayload` | 抽取演播结束且 `pickResultDialog.showLastResult = true` 时下发。窗口固定显示在主屏工作区右上角，卡片从屏幕右缘滑入，列出本轮学生与信封品阶。 |
 | **`HideWindow`** | `GET` | 后端 $\to$ LRW | `null` | 新抽取开始时、或关闭 `showLastResult` 开关时下发，向右滑出隐藏暂留浮窗。 |
-| **`ApplyNewProp`** | `GET` | 后端 $\to$ LRW | `PickResultDialogConfig` | 同步暂留浮窗的背景色、边框色、不透明度与自动关闭时长（不透明度同时作用于卡片内的姓名片、徽标与进度条）。 |
-| **`Destroy`** | `DEST` | 后端 $\to$ LRW | `null` | 关闭窗口并结束 LRW 线程消息循环。 |
+| **`ApplyProps`** | `GET` | 后端 $\to$ LRW | `PickResultDialogConfig` | 同步暂留浮窗的背景色、边框色、不透明度与自动关闭时长（不透明度同时作用于卡片内的姓名片、徽标与进度条）。 |
+| **`Destroy`** | `DESTROY` | 后端 $\to$ LRW | `null` | 关闭窗口并结束 LRW 线程消息循环。 |
 
 > LRW 的关闭按钮仅隐藏窗口（不影响配置开关），下一次抽取结束后会再次自动显示。
 
@@ -151,16 +151,16 @@ public static void Subscribe(IpcModule module, Action<IpcMessage> handler);
 | 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
 | :--- | :---: | :---: | :--- | :--- |
 | **`ShowConfigPanel`** | `GET` | 后端 $\to$ CP | `null` | 托盘菜单点击“配置”时下发。将配置窗口取消最小化/隐藏状态，显示并激活到最前台。 |
-| **`ConfigSaved`** | `POST` | CP $\to$ 后端 | `string` (YAML 文本) | 前端点击“应用”时上报。后端执行 YAML 反序列化校验、班级名单同步、写盘持久化、更新 `ConfigCache`，并广播 `ApplyNewProp` 与 `ApplyDefaultPickCount` 给 FCB。 |
+| **`ConfigSaved`** | `POST` | CP $\to$ 后端 | `string` (YAML 文本) | 前端点击“应用”时上报。后端执行 YAML 反序列化校验、班级名单同步、写盘持久化、更新 `ConfigCache`，并广播 `ApplyProps` 与 `ApplyDefaultPickCount` 给 FCB。 |
 | **`OverwriteConfig`** | `GET` | 后端 $\to$ CP | `string` (YAML 文本) | 保存校验失败时回滚覆写，或后端主动向前端同步最新配置。 |
-| **`Destroy`** | `DEST` | 后端 $\to$ CP | `null` | 销毁配置面板窗口及 WebView2 运行时。 |
+| **`Destroy`** | `DESTROY` | 后端 $\to$ CP | `null` | 销毁配置面板窗口及 WebView2 运行时。 |
 
 #### 2.4.5 全局控制模块 (`IpcModule.Ipc`)
 
 | 指令名称 (`Command`) | 动作 | 传递方向 | 载荷类型 (`Payload`) | 说明 |
 | :--- | :---: | :---: | :--- | :--- |
 | **`Initialize`** | `INIT` | 启动管线 $\to$ 系统 | `null` | 启动管线 Stage 4 完成跨线程调度总线初始化。 |
-| **`Destroy`** | `DEST` | 退出请求 $\to$ 系统 | `null` | 广播退出信号，向所有组件下发 `Destroy` 并优雅关闭进程。 |
+| **`Destroy`** | `DESTROY` | 退出请求 $\to$ 系统 | `null` | 广播退出信号，向所有组件下发 `Destroy` 并优雅关闭进程。 |
 
 ---
 
@@ -198,10 +198,10 @@ public class NativeBridge
 
     // ==================== 2. 班级管理直连 (classes/) ====================
     // 列出所有已保存班级元数据及当前激活的班级 ID (返回 JSON 字符串)
-    public string ListClassesJson();
+    public string GetClassesJson();
 
     // 创建新班级，自动生成唯一 classId 并写入 classes/<classId>.yaml
-    public string CreateClass(string name);
+    public string CreateClassJson(string name);
 
     // 重命名指定班级
     public bool RenameClass(string classId, string newName);
@@ -211,7 +211,7 @@ public class NativeBridge
 
     // ==================== 3. 自定义资源库 (customs/) ====================
     // 保存自定义资源 (图标、音效、BGM)，写入 customs/custom_<id>.yaml
-    public string SaveCustomResource(string fileName, string mimeType, string purpose, string base64, double duration);
+    public string SaveCustomResourceJson(string fileName, string mimeType, string purpose, string base64, double duration);
 
     // 根据 resourceId 读取指定资源元数据与 Base64 (返回 JSON 字符串)
     public string GetCustomResourceJson(string customId);
@@ -307,11 +307,11 @@ public class NativeBridge
 | **`getFloatingPosition()`** | 无 | `Promise<{ x: number, y: number }\|null>` | `GetFloatingPositionJson()` | 实时获取悬浮球当前屏幕坐标。 |
 | **`getLogs(maxLines)`** | `maxLines?: number` | `Promise<Array<LogEntry>>` | `GetLogsJson(maxLines)` | 按时间正序读取运行日志条目。 |
 | **`pickExeFile()`** | 无 | `Promise<string>` | `PickFile(...)` | 选取 Windows 可执行程序路径 (`*.exe`)。 |
-| **`listClasses()`** | 无 | `Promise<{ ok: boolean, classes: ClassItem[], activeClassId: string }>` | `ListClassesJson()` | 获取班级库及当前激活班级 ID。 |
-| **`createClass(name)`** | `name: string` | `Promise<{ ok: boolean, class: ClassItem }>` | `CreateClass(name)` | 创建新班级名单。 |
+| **`listClasses()`** | 无 | `Promise<{ ok: boolean, classes: ClassItem[], activeClassId: string }>` | `GetClassesJson()` | 获取班级库及当前激活班级 ID。 |
+| **`createClass(name)`** | `name: string` | `Promise<{ ok: boolean, class: ClassItem }>` | `CreateClassJson(name)` | 创建新班级名单。 |
 | **`renameClass(id, name)`** | `id: string, name: string` | `Promise<{ ok: boolean, message: string }>` | `RenameClass(id, name)` | 重命名班级。 |
 | **`deleteClass(id)`** | `id: string` | `Promise<{ ok: boolean, message: string }>` | `DeleteClass(id)` | 删除班级名单。 |
-| **`saveCustom(payload)`** | `{ fileName, mimeType, purpose, base64, duration }` | `Promise<{ ok: boolean, id: string, ... }>` | `SaveCustomResource(...)` | 保存自定义资源素材（图标、音效、BGM）。 |
+| **`saveCustom(payload)`** | `{ fileName, mimeType, purpose, base64, duration }` | `Promise<{ ok: boolean, id: string, ... }>` | `SaveCustomResourceJson(...)` | 保存自定义资源素材（图标、音效、BGM）。 |
 | **`getCustom(id)`** | `id: string` | `Promise<CustomItem\|null>` | `GetCustomResourceJson(id)` | 加载指定资源元数据与 Base64。 |
 | **`deleteCustom(id)`** | `id: string` | `Promise<{ ok: boolean }>` | `DeleteCustomResource(id)` | 删除指定自定义素材。 |
 | **`getSecurityStatus()`** | 无 | `Promise<{ enabled: boolean }>` | `IsSecurityEnabled()` | 获取密码保护是否开启。 |
@@ -441,12 +441,12 @@ sequenceDiagram
         Scheduler->>Disk: 3. 持久化到本地 config.yaml
         Scheduler->>Scheduler: 4. 更新内存中的 ConfigCache.Current
         
-        Scheduler->>Bus: 5. 广播 GET @FCB.ApplyNewProp(ConfigCache.GetFCBProps())
+        Scheduler->>Bus: 5. 广播 GET @FCB.ApplyProps(ConfigCache.GetFcbProps())
         Bus->>FCB: 热更新悬浮按钮尺寸、边框、透明度与图标
         Scheduler->>Bus: 5.1 广播 GET @FCB.ApplyDefaultPickCount(defaultCount)
         Bus->>FCB: 热更新人数选择器默认抽取人数
 
-        Scheduler->>Bus: 6. 广播 GET @FRW.ApplyNewProp(ConfigCache.GetFRWProps())
+        Scheduler->>Bus: 6. 广播 GET @FRW.ApplyProps(ConfigCache.GetFrwProps())
         Bus->>FRW: 热更新演播窗音量与背景样式
 
         Scheduler->>Scheduler: 7. 刷新结果暂留浮窗 (RefreshLastResultWindow)
@@ -498,7 +498,7 @@ sequenceDiagram
     Web->>Canvas: convertImageToPng(file)
     Note over Web,Canvas: 规避 Windows WIC 解码器缺失导致报错 (0x88982F50)<br/>统一缩放至最大 256x256 并转码为标准 32 位 PNG Base64
     Canvas-->>Web: 输出纯净 PNG Base64 字符串
-    Web->>Bridge: SaveCustomResource(fileName, "image/png", "icon", base64, 0)
+    Web->>Bridge: SaveCustomResourceJson(fileName, "image/png", "icon", base64, 0)
     Bridge->>Customs: 写入 customs/custom_<id>.yaml
     Bridge-->>Web: 返回 CustomItem 对象 (包含唯一自定义 ID: custom_<id>)
     Web->>Web: 绑定 customIconId 引用，实时展示图片预览

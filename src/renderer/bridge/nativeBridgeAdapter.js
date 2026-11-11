@@ -286,7 +286,7 @@ export function setupNativeBridgeAdapter() {
       try {
         const b = getBridge()
         if (!b) return { ok: false, classes: [] }
-        const json = await b.ListClassesJson()
+        const json = await b.GetClassesJson()
         const parsed = typeof json === 'string' ? JSON.parse(json || '{}') : json
         let rawList = []
         let activeClassId = ''
@@ -327,7 +327,7 @@ export function setupNativeBridgeAdapter() {
         const b = getBridge()
         if (!b) return { ok: false, message: 'Bridge unavailable' }
         const name = typeof arg === 'string' ? arg : (arg?.name || '')
-        const json = await b.CreateClass(name)
+        const json = await b.CreateClassJson(name)
         const parsed = typeof json === 'string' ? JSON.parse(json || '{}') : json
         const rawClass = parsed?.class || parsed?.Class || (parsed?.classId || parsed?.ClassId ? parsed : null)
         if (rawClass) {
@@ -407,7 +407,7 @@ export function setupNativeBridgeAdapter() {
         const b = getBridge()
         if (!b) return { ok: false, message: 'Bridge unavailable' }
         const { fileName, mimeType, purpose, base64, duration } = payload || {}
-        const json = await b.SaveCustomResource(fileName || '', mimeType || '', purpose || '', base64 || '', duration || 0)
+        const json = await b.SaveCustomResourceJson(fileName || '', mimeType || '', purpose || '', base64 || '', duration || 0)
         if (!json || json === 'null') return { ok: false, message: '保存失败' }
         const obj = typeof json === 'string' ? JSON.parse(json) : json
         if (obj && (obj.id || obj.Id)) {

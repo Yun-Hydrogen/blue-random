@@ -12,8 +12,8 @@
 
   数据流：
     父组件 ConfigPanel 持有 draft.floatingButton 对象
-    本组件通过 props.fb 接收完整的 floatingButton 配置
-    任何修改通过 emit('update:fb', newFb) 把整个新对象传回父组件
+    本组件通过 props.floatingButton 接收完整的 floatingButton 配置
+    任何修改通过 emit('update:floatingButton', newFloatingButton) 把整个新对象传回父组件
 
   主题色：初音绿 #39c5bb，通过 tabTheme 变量传给 rizui_switch / rizui_colorpicker
 
@@ -26,7 +26,7 @@
     - 旧版内嵌 iconDataUrl 由 customs.ensureInitialized() 启动时自动迁移
 
   注意事项：
-    - 必须用扩展运算符 {...props.fb, key: newValue} 创建新对象触发响应式
+    - 必须用扩展运算符 {...props.floatingButton, key: newValue} 创建新对象触发响应式
     - 滑条默认值兜底：sizePercent||100, iconSize||48，防止首次渲染 NaN
     - 图标文本框为 readonly 模式，显示 customIconId 引用（无手动编辑意义）
     - 颜色选择器由 rizui_colorpicker 统一管理（HSL 转换 / 拖拽 / Dialog 动画）
@@ -38,7 +38,7 @@
     - 上传改为内存暂存：选图先暂存主进程内存（不落盘），“应用”时才写入 customs/，
       未应用关闭面板即舍弃；恢复默认不再立即删资源（应用时统一处理）
     - 修复“实时位置”X 不自动读取：原 refreshLivePosition 通过 posX.value/posY.value
-      分别赋值会触发两次独立 emit('update:fb')，第二次基于未更新的 props.fb 会把 X
+      分别赋值会触发两次独立 emit('update:floatingButton')，第二次基于未更新的 props.floatingButton 会把 X
       覆盖回旧值；改为一次合并 emit({ position: { x, y } })
 -->
 
@@ -49,13 +49,13 @@
 
       <rizui_cfgrow label="默认抽取人数" hint="打开悬浮按钮人数选择器时预先选中的人数，范围为 1-10 人">
         <rizui_slider
-          :model-value="pickCount.defaultCount ?? 1"
+          :model-value="pickCountDialog.defaultCount ?? 1"
           :min="1"
           :max="10"
           :step="1"
           :color="tabTheme"
           display="人"
-          @update:model-value="$emit('update:pickCount',{...pickCount,defaultCount:$event})"
+          @update:model-value="$emit('update:pickCountDialog',{...pickCountDialog,defaultCount:$event})"
         />
       </rizui_cfgrow>
 
@@ -67,11 +67,11 @@
       </rizui_cfgrow>
 
       <rizui_cfgrow label="持续置顶" hint="启用后开启悬浮按钮的置顶功能">
-        <rizui_switch :model-value="fb.alwaysOnTop" :color="tabTheme" @update:model-value="$emit('update:fb',{...fb,alwaysOnTop:$event})" />
+        <rizui_switch :model-value="floatingButton.alwaysOnTop" :color="tabTheme" @update:model-value="$emit('update:floatingButton',{...floatingButton,alwaysOnTop:$event})" />
       </rizui_cfgrow>
 
       <rizui_cfgrow label="任务栏可见" hint="悬浮按钮是否显示在任务栏中，可能解决多桌面下桌面意外跳转的问题">
-        <rizui_switch :model-value="fb.showInTaskbar" :color="tabTheme" @update:model-value="$emit('update:fb',{...fb,showInTaskbar:$event})" />
+        <rizui_switch :model-value="floatingButton.showInTaskbar" :color="tabTheme" @update:model-value="$emit('update:floatingButton',{...floatingButton,showInTaskbar:$event})" />
       </rizui_cfgrow>
     </rizui_card>
 
@@ -80,7 +80,7 @@
 
       <!-- 中心图标 -->
       <rizui_cfgrow label="按钮大小" hint="缩放百分比，100% 为默认尺寸">
-        <rizui_slider :model-value="fb.sizePercent || 100" :min="50" :max="200" :color="tabTheme" display="%" @update:model-value="$emit('update:fb',{...fb,sizePercent:$event})" />
+        <rizui_slider :model-value="floatingButton.sizePercent || 100" :min="50" :max="200" :color="tabTheme" display="%" @update:model-value="$emit('update:floatingButton',{...floatingButton,sizePercent:$event})" />
       </rizui_cfgrow>
 
       <rizui_cfgrow label="中心图标" hint="按钮中央显示的图片，点击右侧按钮选择本地图片" stack>
@@ -88,7 +88,7 @@
           <div class="icon-actions">
             <div class="icon-path-row">
               <rizui_text
-                :model-value="fb.customIconId"
+                :model-value="floatingButton.customIconId"
                 readonly
                 :placeholder="iconPlaceholder"
                 :color="tabTheme"
@@ -110,12 +110,12 @@
 
       <!-- 图标大小 -->
       <rizui_cfgrow label="图标大小" hint="中心图标在按钮内的显示尺寸（实际不超过按钮的 80%）">
-        <rizui_slider :model-value="fb.iconSize || 48" :min="16" :max="96" :color="tabTheme" display="px" @update:model-value="$emit('update:fb',{...fb,iconSize:$event})" />
+        <rizui_slider :model-value="floatingButton.iconSize || 48" :min="16" :max="96" :color="tabTheme" display="px" @update:model-value="$emit('update:floatingButton',{...floatingButton,iconSize:$event})" />
       </rizui_cfgrow>
 
       <!-- 边框颜色 -->
       <rizui_cfgrow label="按钮边框颜色" hint="悬浮圆形按钮的外圈描边颜色">
-        <rizui_colorpicker v-model="fb.borderColor" :color="tabTheme" teleport=".config-left" />
+        <rizui_colorpicker v-model="floatingButton.borderColor" :color="tabTheme" teleport=".config-left" />
       </rizui_cfgrow>
     </rizui_card>
   </div>
@@ -137,7 +137,7 @@ const tabTheme = '#39c5bb'
 
 /*
  *  props：父组件传入的数据
- *  fb —— floatingButton 配置对象，包含以下字段：
+ *  floatingButton —— floatingButton 配置对象，包含以下字段：
  *    sizePercent   (number)  按钮缩放百分比，默认 100
  *    alwaysOnTop   (boolean) 是否持续置顶
  *    position.x    (number|null) 屏幕 X 坐标，null=自动
@@ -147,8 +147,8 @@ const tabTheme = '#39c5bb'
  *    borderColor   (string)  边框颜色，默认 '#ffffff'
  */
 const props = defineProps({
-  fb: Object,
-  pickCount: {
+  floatingButton: Object,
+  pickCountDialog: {
     type: Object,
     default: () => ({ defaultCount: 1 })
   }
@@ -156,33 +156,33 @@ const props = defineProps({
 
 /*
  *  emit：向父组件发送数据变更事件
- *  update:fb —— 悬浮按钮配置发生变化
- *  update:pickCount —— 默认抽取人数配置发生变化
- *  注意：必须传递完整的新对象（用扩展运算符创建），不能直接修改 props.fb 的属性
+ *  update:floatingButton —— 悬浮按钮配置发生变化
+ *  update:pickCountDialog —— 默认抽取人数配置发生变化
+ *  注意：必须传递完整的新对象（用扩展运算符创建），不能直接修改 props.floatingButton 的属性
  */
-const emit = defineEmits(['update:fb', 'update:pickCount'])
+const emit = defineEmits(['update:floatingButton', 'update:pickCountDialog'])
 
 /* 悬浮按钮位置：默认实时跟随（主进程轮询）；用户编辑后以手动值为准 */
 const userEditedPosition = ref(false)
 let programmaticSync = false
 let positionTimer = null
 
-/* v-model 桥接：位置输入框 ↔ props.fb.position（空值 → null） */
+/* v-model 桥接：位置输入框 ↔ props.floatingButton.position（空值 → null） */
 const posX = computed({
-  get: () => props.fb.position?.x ?? null,
+  get: () => props.floatingButton.position?.x ?? null,
   set: (val) => {
     if (!programmaticSync) userEditedPosition.value = true
     const n = Number(val)
-    emit('update:fb', { ...props.fb, position: { ...props.fb.position, x: val === null || val === '' || Number.isNaN(n) ? null : Math.round(n) } })
+    emit('update:floatingButton', { ...props.floatingButton, position: { ...props.floatingButton.position, x: val === null || val === '' || Number.isNaN(n) ? null : Math.round(n) } })
   }
 })
 
 const posY = computed({
-  get: () => props.fb.position?.y ?? null,
+  get: () => props.floatingButton.position?.y ?? null,
   set: (val) => {
     if (!programmaticSync) userEditedPosition.value = true
     const n = Number(val)
-    emit('update:fb', { ...props.fb, position: { ...props.fb.position, y: val === null || val === '' || Number.isNaN(n) ? null : Math.round(n) } })
+    emit('update:floatingButton', { ...props.floatingButton, position: { ...props.floatingButton.position, y: val === null || val === '' || Number.isNaN(n) ? null : Math.round(n) } })
   }
 })
 
@@ -195,11 +195,11 @@ async function refreshLivePosition() {
     if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y) && !userEditedPosition.value) {
       /*
        * 注意：不能通过 posX.value / posY.value 分别赋值（会触发两次独立的
-       * emit('update:fb')，第二次基于尚未更新的 props.fb 会把 X 覆盖回旧值）。
+       * emit('update:floatingButton')，第二次基于尚未更新的 props.floatingButton 会把 X 覆盖回旧值）。
        * 必须一次 emit 合并写入完整的 position，避免 X 被覆盖回 null/旧值。
        */
       programmaticSync = true
-      emit('update:fb', { ...props.fb, position: { x: Math.round(pos.x), y: Math.round(pos.y) } })
+      emit('update:floatingButton', { ...props.floatingButton, position: { x: Math.round(pos.x), y: Math.round(pos.y) } })
       programmaticSync = false
     }
   } catch (_) {}
@@ -209,7 +209,7 @@ onMounted(() => {
   refreshLivePosition()
   loadCustomIcon()
   /* customIconId 变化时重新拉取预览 */
-  watch(() => props.fb.customIconId, loadCustomIcon)
+  watch(() => props.floatingButton.customIconId, loadCustomIcon)
   /* 悬浮按钮拖动时位置会变化，轮询保持实时（1s，IPC 开销可忽略） */
   positionTimer = setInterval(refreshLivePosition, 1000)
 })
@@ -239,7 +239,7 @@ const previewDataUrl = ref('')
  *  未设置图标时显示提示文字，设置后显示 customIconId 引用
  */
 const iconPlaceholder = computed(() => {
-  return (props.fb.customIconId || '') ? `已设置自定义图标 (${props.fb.customIconId})` : '点击右侧按钮选择本地图片'
+  return (props.floatingButton.customIconId || '') ? `已设置自定义图标 (${props.floatingButton.customIconId})` : '点击右侧按钮选择本地图片'
 })
 
 /*
@@ -253,7 +253,7 @@ const iconPreviewSrc = computed(() => previewDataUrl.value || defaultIcon)
  * 按 customIconId 从 customs/ 拉取资源并组装 data URL 供本地预览。
  */
 async function loadCustomIcon() {
-  const id = props.fb.customIconId
+  const id = props.floatingButton.customIconId
   if (!id) { previewDataUrl.value = ''; return }
   try {
     const c = await window.configPanelApi?.getCustom?.({ id })
@@ -273,8 +273,8 @@ async function loadCustomIcon() {
  *  此处计算相同的值，确保配置面板预览与实际悬浮按钮显示一致。
  */
 const effectivePreviewSize = computed(() => {
-  const iconSize = props.fb.iconSize || 48
-  const sizePx = Math.round(50 * ((props.fb.sizePercent || 100) / 100))
+  const iconSize = props.floatingButton.iconSize || 48
+  const sizePx = Math.round(50 * ((props.floatingButton.sizePercent || 100) / 100))
   const maxIcon = Math.round(sizePx * 0.8)
   return Math.max(16, Math.min(iconSize, maxIcon))
 })
@@ -348,7 +348,7 @@ async function handleIconPick(e) {
       base64
     })
     if (res?.ok && res.id) {
-      emit('update:fb', { ...props.fb, customIconId: res.id })
+      emit('update:floatingButton', { ...props.floatingButton, customIconId: res.id })
     } else {
       previewDataUrl.value = ''
       console.error('暂存自定义图标失败', res)
@@ -370,7 +370,7 @@ async function handleIconPick(e) {
  */
 function resetIcon() {
   previewDataUrl.value = ''
-  emit('update:fb', { ...props.fb, customIconId: '', iconSize: 48 })
+  emit('update:floatingButton', { ...props.floatingButton, customIconId: '', iconSize: 48 })
 }
 
 </script>

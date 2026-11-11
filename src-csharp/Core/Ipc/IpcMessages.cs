@@ -14,12 +14,12 @@ namespace BlueRandom.Core.Ipc;
 
 /// <summary>
 /// IPC 动作语义类型。
-/// 对应通信协议中的操作谓词：初始化（Init）、销毁清理（Dest）、拉取查询（Get）、推送变异（Post）。
+/// 对应通信协议中的操作谓词：初始化（Init）、销毁清理（Destroy）、拉取查询（Get）、推送变异（Post）。
 /// </summary>
 public enum IpcAction
 {
     Init,
-    Dest,
+    Destroy,
     Get,
     Post
 }
@@ -49,7 +49,7 @@ public class IpcMessage
     /// <summary>接收目标模块。</summary>
     public IpcModule Target { get; set; }
 
-    /// <summary>指令方法名称（例如 show、hide、reload 等）。</summary>
+    /// <summary>指令方法名称（例如 ShowWindow、HideWindow、ApplyProps）。</summary>
     public string Command { get; set; } = string.Empty;
 
     /// <summary>可选载荷对象（可承载强类型 DTO 或基础数据）。</summary>

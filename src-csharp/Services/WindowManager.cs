@@ -26,7 +26,7 @@ public static class WindowManager
 {
     private static Thread? _fcbThread;
     private static Thread? _frwThread;
-    private static Thread? _webUiThread;
+    private static Thread? _cpThread;
     private static Thread? _lrwThread;
     private static LastResultWindow? _lrwWindow;
 
@@ -62,7 +62,7 @@ public static class WindowManager
             }
         })
         {
-            Name = "FCB_UI_Thread",
+            Name = "Fcb_UI_Thread",
             IsBackground = true
         };
         _fcbThread.SetApartmentState(ApartmentState.STA);
@@ -82,14 +82,14 @@ public static class WindowManager
             }
         })
         {
-            Name = "FRW_UI_Thread",
+            Name = "Frw_UI_Thread",
             IsBackground = true
         };
         _frwThread.SetApartmentState(ApartmentState.STA);
         _frwThread.Start();
 
         // 3. 配置面板 (CP) 独立线程（首次打开时初始化 WebView2，不做启动预热）
-        _webUiThread = new Thread(() =>
+        _cpThread = new Thread(() =>
         {
             try
             {
@@ -102,11 +102,11 @@ public static class WindowManager
             }
         })
         {
-            Name = "WebUI_Thread",
+            Name = "Cp_UI_Thread",
             IsBackground = true
         };
-        _webUiThread.SetApartmentState(ApartmentState.STA);
-        _webUiThread.Start();
+        _cpThread.SetApartmentState(ApartmentState.STA);
+        _cpThread.Start();
 
         // 4. 结果暂留浮窗 (LRW) 独立线程：按需显示在屏幕右上角
         _lrwThread = new Thread(() =>
@@ -123,7 +123,7 @@ public static class WindowManager
             }
         })
         {
-            Name = "LRW_UI_Thread",
+            Name = "Lrw_UI_Thread",
             IsBackground = true
         };
         _lrwThread.SetApartmentState(ApartmentState.STA);

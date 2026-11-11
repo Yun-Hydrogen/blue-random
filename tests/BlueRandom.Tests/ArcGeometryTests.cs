@@ -23,7 +23,7 @@ public class ArcGeometryTests
     /// 验证弧形胶囊环形带几何拓扑绘制与 WPF 离屏位图光栅化渲染管线
     /// </summary>
     [Fact]
-    public void TestRenderArc()
+    public void RenderArc_ProducesExpectedGeometry()
     {
         double cx = 120, cy = 120;
         double rMid = 62.0;

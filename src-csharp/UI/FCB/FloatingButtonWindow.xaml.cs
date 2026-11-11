@@ -111,7 +111,7 @@ public partial class FloatingButtonWindow : Window
     /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyProps(ConfigCache.GetFCBProps());
+        ApplyProps(ConfigCache.GetFcbProps());
         SetPickCount(ConfigCache.Current.PickCountDialog.DefaultCount);
 
         var hwnd = new WindowInteropHelper(this).Handle;
@@ -686,7 +686,7 @@ public partial class FloatingButtonWindow : Window
     // ========================================================================
 
     /// <summary>
-    /// 处理面向悬浮球模块的 IPC 消息分发（HideWindow, ShowWindow, ApplyNewProp, MoveNewPosition, Destroy）。
+    /// 处理面向悬浮球模块的 IPC 消息分发（HideWindow, ShowWindow, ApplyProps, MoveNewPosition, Destroy）。
     /// </summary>
     /// <param name="msg">IPC 消息包。</param>
     private void OnIpcMessageReceived(IpcMessage msg)
@@ -706,7 +706,7 @@ public partial class FloatingButtonWindow : Window
                     WindowsSystemService.RefreshTopMost(hwnd);
                     break;
 
-                case "ApplyNewProp":
+                case "ApplyProps":
                     if (msg.Payload is FloatingButtonConfig cfg)
                     {
                         ApplyProps(cfg);

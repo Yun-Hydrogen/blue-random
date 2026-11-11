@@ -238,9 +238,9 @@ public sealed class DCompResultWindow
     [DllImport("winmm.dll")]
     private static extern uint timeEndPeriod(uint uPeriod);
 
-    private static WndProc? s_wndProc;
-    private static IntPtr s_hwnd;
-    private static DCompResultWindow? s_instance;
+    private static WndProc? _wndProc;
+    private static IntPtr _hwnd;
+    private static DCompResultWindow? _instance;
 
     // ========================================================================
     //  2. 图形设备
@@ -316,26 +316,26 @@ public sealed class DCompResultWindow
     private double _hintY;
 
     // 布局常量（与 WPF 原版一致）
-    private const double CARD_W = 196;
-    private const double CARD_H = 147;
-    private const double COL_GAP = 32;
-    private const double ROW_GAP = 44;
-    private const double PANEL_BAND_X = 48 * 2 + 4 * 2;
-    private const double PANEL_BAND_Y = 24 + 20 + 4 * 2;
-    private const double HINT_BAND = 32 + 24 + 2;
-    private const double HINT_H = 32;
-    private const double HINT_GAP = 16;     // 提示条与面板的间距（提示条位于面板外正下方）
-    private const double MARGIN_X = 160;
-    private const double MARGIN_Y = 120;
-    private const int NAME_PAD = 12;
+    private const double CardWidth = 196;
+    private const double CardHeight = 147;
+    private const double ColumnGap = 32;
+    private const double RowGap = 44;
+    private const double PanelBandX = 48 * 2 + 4 * 2;
+    private const double PanelBandY = 24 + 20 + 4 * 2;
+    private const double HintBand = 32 + 24 + 2;
+    private const double HintHeight = 32;
+    private const double HintGap = 16;     // 提示条与面板的间距（提示条位于面板外正下方）
+    private const double MarginX = 160;
+    private const double MarginY = 120;
+    private const int NamePad = 12;
 
     // 动画常量
-    private const double PANEL_MS = 700;
-    private const double CARD_MS = 600;
-    private const double CARD_STAGGER_MS = 120;
-    private const double NAME_MS = 300;
-    private const double CLOSE_MS = 200;
-    private const double CARD_BASE_SCALE = 152.0 / 264.0;   // 阴影图 264×304 → 显示 152×175
+    private const double PanelMs = 700;
+    private const double CardMs = 600;
+    private const double CardStaggerMs = 120;
+    private const double NameMs = 300;
+    private const double CloseMs = 200;
+    private const double CardBaseScale = 152.0 / 264.0;   // 阴影图 264×304 → 显示 152×175
 
     // 音频
     private MediaPlayer? _sfxPlayer;
@@ -343,8 +343,8 @@ public sealed class DCompResultWindow
     private double _bgmTargetVolume;
     private double _bgmCurrentVolume;
     private double _bgmFadeSec = 1.5;
-    private bool _bgmFadingIn;
-    private bool _bgmFadingOut;
+    private bool _isBgmFadingIn;
+    private bool _isBgmFadingOut;
 
     // ========================================================================
     //  4. 生命周期
@@ -352,7 +352,7 @@ public sealed class DCompResultWindow
 
     public DCompResultWindow()
     {
-        s_instance = this;
+        _instance = this;
         if (Environment.GetEnvironmentVariable("BLUERANDOM_DCOMP_FRW_DEMO") != "1")
         {
             IpcBroker.Subscribe(IpcModule.Frw, OnIpcMessageReceived);
@@ -364,11 +364,11 @@ public sealed class DCompResultWindow
     {
         try
         {
-            s_wndProc = WndProcImpl;
+            _wndProc = WndProcImpl;
             var wc = new WNDCLASSEX
             {
                 cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
-                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(s_wndProc),
+                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
                 hInstance = GetModuleHandleW(null),
                 hCursor = LoadCursorW(IntPtr.Zero, IDC_ARROW),   // 关键：显式箭头光标
                 hbrBackground = IntPtr.Zero,
@@ -376,14 +376,14 @@ public sealed class DCompResultWindow
             };
             RegisterClassExW(ref wc);
 
-            s_hwnd = CreateWindowExW(
+            _hwnd = CreateWindowExW(
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,
                 "BlueRandomDCompResult", "Blue Random Result",
                 WS_POPUP,
                 (1920 - 900) / 2, (1080 - 620) / 2, 900, 620,
                 IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
 
-            if (s_hwnd == IntPtr.Zero)
+            if (_hwnd == IntPtr.Zero)
             {
                 AppLogger.Error("DCompFRW", "CreateWindowEx 失败");
                 return;
@@ -443,7 +443,7 @@ public sealed class DCompResultWindow
 
         _dcomp = DComp.DCompositionCreateDevice2<IDCompositionDevice>(_d2dDevice);
         _desktop = _dcomp.QueryInterface<IDCompositionDesktopDevice>();
-        _desktop.CreateTargetForHwnd(s_hwnd, true, out _target);
+        _desktop.CreateTargetForHwnd(_hwnd, true, out _target);
         _rootVisual = _dcomp.CreateVisual();
         _rootVisual3 = _rootVisual.QueryInterface<IDCompositionVisual3>();
         _target.SetRoot(_rootVisual);
@@ -476,7 +476,7 @@ public sealed class DCompResultWindow
     private void OnIpcMessageReceived(IpcMessage msg)
     {
         _uiQueue.Enqueue(() => HandleIpc(msg));
-        var hwnd = s_hwnd;
+        var hwnd = _hwnd;
         if (hwnd != IntPtr.Zero) PostMessageW(hwnd, WM_APP_EXEC, IntPtr.Zero, IntPtr.Zero);
     }
 
@@ -487,7 +487,7 @@ public sealed class DCompResultWindow
             case "ShowWindow":
                 if (msg.Payload is FrwShowPayload showPayload)
                 {
-                    DisplayResults(showPayload.CalledStudents, ConfigCache.GetFRWProps());
+                    DisplayResults(showPayload.CalledStudents, ConfigCache.GetFrwProps());
                 }
                 break;
 
@@ -509,7 +509,7 @@ public sealed class DCompResultWindow
         _canClose = false;
         _phaseStartMs = 0;
 
-        uint dpi = GetDpiForWindow(s_hwnd);
+        uint dpi = GetDpiForWindow(_hwnd);
         _dpiScale = dpi == 0 ? 1.0 : dpi / 96.0;
 
         BuildLayout();
@@ -521,13 +521,13 @@ public sealed class DCompResultWindow
         BuildLayers();
         EnsureSurface();
 
-        SetWindowPos(s_hwnd, new IntPtr(-1),
+        SetWindowPos(_hwnd, new IntPtr(-1),
             (int)Math.Round(_winX * _dpiScale), (int)Math.Round(_winY * _dpiScale),
             (int)Math.Round(_winW * _dpiScale), (int)Math.Round(_winH * _dpiScale),
             0x0040 /* SWP_SHOWWINDOW */);
-        ShowWindow(s_hwnd, SW_SHOW);
-        SetForegroundWindow(s_hwnd);
-        SetFocus(s_hwnd);
+        ShowWindow(_hwnd, SW_SHOW);
+        SetForegroundWindow(_hwnd);
+        SetFocus(_hwnd);
 
         _clock.Restart();
         StartTickTimer();
@@ -569,7 +569,7 @@ public sealed class DCompResultWindow
             _mouseHook = IntPtr.Zero;
         })
         {
-            Name = "FRW_MouseHook",
+            Name = "Frw_MouseHook",
             IsBackground = true,
         };
         _hookThread.SetApartmentState(ApartmentState.STA);
@@ -603,7 +603,7 @@ public sealed class DCompResultWindow
             if (isDown)
             {
                 // 就绪：吞掉点击（不透传下层），投递到渲染线程关闭浮窗
-                PostMessageW(s_hwnd, WM_LBUTTONDOWN, IntPtr.Zero, IntPtr.Zero);
+                PostMessageW(_hwnd, WM_LBUTTONDOWN, IntPtr.Zero, IntPtr.Zero);
                 return new IntPtr(1);
             }
         }
@@ -617,7 +617,7 @@ public sealed class DCompResultWindow
     /// </summary>
     private static void RefreshCursor()
     {
-        var cursor = (s_instance != null && s_instance.IsReadyToClose()) ? HandCursor : ArrowCursor;
+        var cursor = (_instance != null && _instance.IsReadyToClose()) ? HandCursor : ArrowCursor;
         if (cursor != IntPtr.Zero) SetCursor(cursor);
     }
 
@@ -629,7 +629,7 @@ public sealed class DCompResultWindow
     {
         try
         {
-            if (GetCursorPos(out POINT pt) && WindowFromPoint(pt) == s_hwnd)
+            if (GetCursorPos(out POINT pt) && WindowFromPoint(pt) == _hwnd)
             {
                 RefreshCursor();
             }
@@ -647,7 +647,7 @@ public sealed class DCompResultWindow
         _tickTimer = new System.Threading.Timer(
             _ =>
             {
-                var h = s_hwnd;
+                var h = _hwnd;
                 if (h != IntPtr.Zero && Interlocked.CompareExchange(ref _tickPending, 1, 0) == 0)
                 {
                     try { PostMessageW(h, WM_TIMER, (IntPtr)TIMER_ANIM, IntPtr.Zero); } catch { }
@@ -672,17 +672,17 @@ public sealed class DCompResultWindow
         int rows = count > 5 ? 2 : 1;
         int cols = Math.Clamp(count, 1, 5);
 
-        // 面板本体不再包含提示条区域（HINT_BAND 已移出）
-        _panelW = Math.Max(420, cols * CARD_W + Math.Max(cols - 1, 0) * COL_GAP + PANEL_BAND_X);
-        _panelH = rows * CARD_H + Math.Max(rows - 1, 0) * ROW_GAP + PANEL_BAND_Y;
+        // 面板本体不再包含提示条区域（HintBand 已移出）
+        _panelW = Math.Max(420, cols * CardWidth + Math.Max(cols - 1, 0) * ColumnGap + PanelBandX);
+        _panelH = rows * CardHeight + Math.Max(rows - 1, 0) * RowGap + PanelBandY;
 
         // 内容 = 面板 + 间距 + 提示条（提示条在面板外正下方）
         double contentW = _panelW;
-        double contentH = _panelH + HINT_GAP + HINT_H;
+        double contentH = _panelH + HintGap + HintHeight;
 
         var workArea = SystemParameters.WorkArea;
-        _winW = Math.Min(contentW + MARGIN_X * 2, workArea.Width * 0.95);
-        _winH = Math.Min(contentH + MARGIN_Y * 2, workArea.Height * 0.95);
+        _winW = Math.Min(contentW + MarginX * 2, workArea.Width * 0.95);
+        _winH = Math.Min(contentH + MarginY * 2, workArea.Height * 0.95);
         _winX = workArea.Left + (workArea.Width - _winW) / 2;
         _winY = workArea.Top + (workArea.Height - _winH) / 2;
 
@@ -690,9 +690,9 @@ public sealed class DCompResultWindow
         _panelLeft = (_winW - _panelW) / 2;
         _panelTop = contentTop;
 
-        _hintW = Math.Clamp(_panelW * 0.60, 220, _panelW - PANEL_BAND_X);
+        _hintW = Math.Clamp(_panelW * 0.60, 220, _panelW - PanelBandX);
         _hintX = _panelLeft + (_panelW - _hintW) / 2;
-        _hintY = _panelTop + _panelH + HINT_GAP;
+        _hintY = _panelTop + _panelH + HintGap;
     }
 
     // ========================================================================
@@ -708,7 +708,7 @@ public sealed class DCompResultWindow
         _panelLayer = CreateLayer(RenderPanelBitmap(), _panelW, _panelH);
 
         // 2. 信封 + 姓名卡
-        double rowSpanW = cols * CARD_W + Math.Max(cols - 1, 0) * COL_GAP;
+        double rowSpanW = cols * CardWidth + Math.Max(cols - 1, 0) * ColumnGap;
         double startX = _panelLeft + (_panelW - rowSpanW) / 2.0;
         double startY = _panelTop + 4 + 24;
 
@@ -717,28 +717,28 @@ public sealed class DCompResultWindow
             var student = _students[i];
             int row = i / 5;
             int col = i % 5;
-            double cx = startX + CARD_W / 2.0 + col * (CARD_W + COL_GAP);
-            double cy = startY + CARD_H / 2.0 + row * (CARD_H + ROW_GAP);
+            double cx = startX + CardWidth / 2.0 + col * (CardWidth + ColumnGap);
+            double cy = startY + CardHeight / 2.0 + row * (CardHeight + RowGap);
 
             var envSource = ResourceCache.GetEnvelopeImage(student.LetterColor) as BitmapSource;
             if (envSource == null) continue;
 
             // 原始素材 + 运行时渲染阴影：画布 = 原始尺寸 + 2×PAD（与旧阴影图同尺寸，布局不变）
             var envBitmap = RenderEnvelopeBitmap(envSource);
-            double envDipW = envSource.PixelWidth + ENV_SHADOW_PAD * 2;
-            double envDipH = envSource.PixelHeight + ENV_SHADOW_PAD * 2;
+            double envDipW = envSource.PixelWidth + EnvShadowPad * 2;
+            double envDipH = envSource.PixelHeight + EnvShadowPad * 2;
             var cardLayer = CreateLayer(envBitmap, envDipW, envDipH);
             _cardLayers.Add(cardLayer);
 
             var nameBitmap = RenderNameBitmap(student.Name);
-            var nameLayer = CreateLayer(nameBitmap, 156 + NAME_PAD * 2, 94 + NAME_PAD * 2);
+            var nameLayer = CreateLayer(nameBitmap, 156 + NamePad * 2, 94 + NamePad * 2);
             _nameLayers.Add(nameLayer);
 
             _cardCenters.Add((cx, cy));
         }
 
         // 4. 固定关闭提示：始终显示同一条提示，不再展示忙碌状态
-        _hintLayer = CreateLayer(RenderHintBitmap("点击任意处关闭", _hintW), _hintW, HINT_H);
+        _hintLayer = CreateLayer(RenderHintBitmap("点击任意处关闭", _hintW), _hintW, HintHeight);
 
         ApplyInitialState();
     }
@@ -794,7 +794,7 @@ public sealed class DCompResultWindow
         RefreshCursor();    // 每帧自愈：窗口出现时继承的忙光标不依赖下一次鼠标移动
 
         // 就绪且 BGM 淡入完成后停止计时（省电）
-        if (_phase == Phase.Ready && !_bgmFadingIn && !_bgmFadingOut)
+        if (_phase == Phase.Ready && !_isBgmFadingIn && !_isBgmFadingOut)
         {
             _tickTimer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
         }
@@ -803,7 +803,7 @@ public sealed class DCompResultWindow
     private void UpdateOpening(double t)
     {
         // 面板：0.7s ease-out 缩放 0.85→1，上移 16→0，0.4s 淡入
-        double pp = EaseOutCubic(Clamp01(t / PANEL_MS));
+        double pp = EaseOutCubic(Clamp01(t / PanelMs));
         double ps = 0.85 + 0.15 * pp;
         double pdy = 16 * (1 - pp);
         double pop = Clamp01(t / 400);
@@ -819,11 +819,11 @@ public sealed class DCompResultWindow
         }
 
         // 信封：0.6s ease-out，交错 120ms
-        int totalDelay = Math.Max(_students.Count - 1, 0) * (int)CARD_STAGGER_MS + (int)CARD_MS;
+        int totalDelay = Math.Max(_students.Count - 1, 0) * (int)CardStaggerMs + (int)CardMs;
         for (int i = 0; i < _cardLayers.Count; i++)
         {
-            double delay = i * CARD_STAGGER_MS;
-            double cp = EaseOutCubic(Clamp01((t - delay) / CARD_MS));
+            double delay = i * CardStaggerMs;
+            double cp = EaseOutCubic(Clamp01((t - delay) / CardMs));
             var (cx, cy) = _cardCenters[i];
             SetCardTransform(_cardLayers[i], cx, cy, 2.5 - 1.5 * cp, -24 * (1 - cp));
             _cardLayers[i].Opacity = (float)Clamp01((t - delay) / 400);
@@ -832,15 +832,15 @@ public sealed class DCompResultWindow
         // 姓名卡：信封全部就位后逐张弹出
         for (int i = 0; i < _nameLayers.Count; i++)
         {
-            double delay = totalDelay + 100 + i * CARD_STAGGER_MS;
-            double np = EaseOutCubic(Clamp01((t - delay) / NAME_MS));
+            double delay = totalDelay + 100 + i * CardStaggerMs;
+            double np = EaseOutCubic(Clamp01((t - delay) / NameMs));
             var (cx, cy) = _cardCenters[i];
             SetNameTransform(_nameLayers[i], cx, cy, 0.96 + 0.04 * np, 12 * (1 - np));
             _nameLayers[i].Opacity = (float)Clamp01((t - delay) / 260);
         }
 
         // 最后一张姓名卡完成时刻（胶囊切换与就绪判定共用）
-        int namesEnd = totalDelay + 100 + Math.Max(0, _nameLayers.Count - 1) * (int)CARD_STAGGER_MS + (int)NAME_MS;
+        int namesEnd = totalDelay + 100 + Math.Max(0, _nameLayers.Count - 1) * (int)CardStaggerMs + (int)NameMs;
 
         // 固定提示条：动画开始后短暂淡入，文案始终为关闭提示
         float hintOp = (float)Clamp01((t - 200) / 300);
@@ -862,7 +862,7 @@ public sealed class DCompResultWindow
 
     private void UpdateClosing(double elapsed)
     {
-        double p = Clamp01(elapsed / CLOSE_MS);
+        double p = Clamp01(elapsed / CloseMs);
         float op = (float)(1.0 - p);
 
         if (_rootVisual != null && _rootVisual3 != null)
@@ -876,7 +876,7 @@ public sealed class DCompResultWindow
             _rootVisual3.SetOpacity(op);
         }
 
-        if (elapsed >= CLOSE_MS) FinishClose();
+        if (elapsed >= CloseMs) FinishClose();
     }
 
     private static double Clamp01(double v) => Math.Clamp(v, 0.0, 1.0);
@@ -886,7 +886,7 @@ public sealed class DCompResultWindow
     {
         double w = layer.Width;
         double h = layer.Height;
-        double scale = CARD_BASE_SCALE * animScale;
+        double scale = CardBaseScale * animScale;
         float rad = (float)(15.0 * Math.PI / 180.0);
         layer.Transform =
             Matrix3x2.CreateTranslation((float)(-w / 2), (float)(-h / 2 + dy)) *
@@ -1054,16 +1054,16 @@ public sealed class DCompResultWindow
     }
 
     /// <summary>信封阴影内边距（DIP）：预留高斯模糊与投影溢出区。</summary>
-    private const int ENV_SHADOW_PAD = 24;
+    private const int EnvShadowPad = 24;
 
     /// <summary>
     /// 预渲染信封：原始素材（216×256）+ 运行时 DropShadowEffect 烘烙成位图。
-    /// 输出画布 = 原始尺寸 + 2×PAD，信封居中，显示时按 CARD_BASE_SCALE 缩放到 124×147 本体。
+    /// 输出画布 = 原始尺寸 + 2×PAD，信封居中，显示时按 CardBaseScale 缩放到 124×147 本体。
     /// </summary>
     private BitmapSource RenderEnvelopeBitmap(BitmapSource source)
     {
-        double wDip = source.PixelWidth + ENV_SHADOW_PAD * 2;
-        double hDip = source.PixelHeight + ENV_SHADOW_PAD * 2;
+        double wDip = source.PixelWidth + EnvShadowPad * 2;
+        double hDip = source.PixelHeight + EnvShadowPad * 2;
 
         var visual = new DrawingVisual
         {
@@ -1082,7 +1082,7 @@ public sealed class DCompResultWindow
 
         using (var dc = visual.RenderOpen())
         {
-            dc.DrawImage(source, new Rect(ENV_SHADOW_PAD, ENV_SHADOW_PAD, source.PixelWidth, source.PixelHeight));
+            dc.DrawImage(source, new Rect(EnvShadowPad, EnvShadowPad, source.PixelWidth, source.PixelHeight));
         }
 
         var rtb = new RenderTargetBitmap(Px(wDip), Px(hDip), 96, 96, PixelFormats.Pbgra32);
@@ -1124,8 +1124,8 @@ public sealed class DCompResultWindow
     {
         int w = 156;
         int h = 94;
-        int tw = w + NAME_PAD * 2;
-        int th = h + NAME_PAD * 2;
+        int tw = w + NamePad * 2;
+        int th = h + NamePad * 2;
         return RenderBitmap(tw, th, dc =>
         {
             // 多层圆角矩形逼近高斯阴影（一次性烘焙，动画期间零重算）
@@ -1135,10 +1135,10 @@ public sealed class DCompResultWindow
                 byte alpha = (byte)(255 * Math.Max(0.004, 0.055 - i * 0.005));
                 dc.DrawRoundedRectangle(
                     new SolidColorBrush(Color.FromArgb(alpha, 0x06, 0x16, 0x30)), null,
-                    new Rect(NAME_PAD - spread, NAME_PAD + 4 - spread / 2, w + spread * 2, h + spread),
+                    new Rect(NamePad - spread, NamePad + 4 - spread / 2, w + spread * 2, h + spread),
                     12 + spread / 2, 12 + spread / 2);
             }
-            dc.DrawRoundedRectangle(Brushes.White, null, new Rect(NAME_PAD, NAME_PAD, w, h), 12, 12);
+            dc.DrawRoundedRectangle(Brushes.White, null, new Rect(NamePad, NamePad, w, h), 12, 12);
 
             double size = name.Length > 8 ? 18.0 : (name.Length > 5 ? 21.0 : 24.0);
             var face = new Typeface(ResourceCache.CustomFont, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
@@ -1150,14 +1150,14 @@ public sealed class DCompResultWindow
                 TextAlignment = TextAlignment.Center,
                 MaxLineCount = 2,
             };
-            dc.DrawText(ft, new Point(NAME_PAD + 8, NAME_PAD + (h - ft.Height) / 2));
+            dc.DrawText(ft, new Point(NamePad + 8, NamePad + (h - ft.Height) / 2));
         });
     }
 
     private BitmapSource RenderHintBitmap(string text, double width)
     {
         int w = (int)Math.Round(width);
-        int h = (int)HINT_H;
+        int h = (int)HintHeight;
         return RenderBitmap(w, h, dc =>
         {
             dc.DrawRoundedRectangle(
@@ -1223,7 +1223,7 @@ public sealed class DCompResultWindow
         _canClose = false;
         _hookReady = false;     // 关闭动画期间停止吞点击
         _phaseStartMs = _clock.Elapsed.TotalMilliseconds;
-        _bgmFadingOut = true;
+        _isBgmFadingOut = true;
         _tickTimer?.Change(0, 16);   // Ready 后计时器已暂停，这里恢复
     }
 
@@ -1245,7 +1245,7 @@ public sealed class DCompResultWindow
         }
 
         SetCursor(ArrowCursor);
-        ShowWindow(s_hwnd, SW_HIDE);
+        ShowWindow(_hwnd, SW_HIDE);
         StopBgmImmediate();
         ReleaseLayers();
         // 随关闭事件上报本轮名单，供"结果暂留浮窗"复用
@@ -1261,15 +1261,15 @@ public sealed class DCompResultWindow
         switch (msg)
         {
             case WM_APP_EXEC:
-                if (s_instance != null)
+                if (_instance != null)
                 {
-                    while (s_instance._uiQueue.TryDequeue(out var action)) action();
+                    while (_instance._uiQueue.TryDequeue(out var action)) action();
                 }
                 return IntPtr.Zero;
 
             case WM_TIMER:
-                if (s_instance != null) Volatile.Write(ref s_instance._tickPending, 0);
-                try { s_instance?.OnTick(); }
+                if (_instance != null) Volatile.Write(ref _instance._tickPending, 0);
+                try { _instance?.OnTick(); }
                 catch (Exception ex) { AppLogger.Warn("DCompFRW", $"动画帧异常: {ex.Message}"); }
                 return IntPtr.Zero;
 
@@ -1291,11 +1291,11 @@ public sealed class DCompResultWindow
 
             case WM_LBUTTONDOWN:
                 // 窗口内点击（含低级钩子投递的全屏点击）→ 就绪后关闭
-                s_instance?.OnMouseDown(GetX(lParam), GetY(lParam));
+                _instance?.OnMouseDown(GetX(lParam), GetY(lParam));
                 return IntPtr.Zero;
 
             case WM_KEYDOWN:
-                if (wParam.ToInt32() == VK_ESCAPE) s_instance?.Dismiss();
+                if (wParam.ToInt32() == VK_ESCAPE) _instance?.Dismiss();
                 return IntPtr.Zero;
 
             case WM_ERASEBKGND:
@@ -1305,11 +1305,11 @@ public sealed class DCompResultWindow
                 return IntPtr.Zero;
 
             case WM_CLOSE:
-                s_instance?.Dismiss();
+                _instance?.Dismiss();
                 return IntPtr.Zero;
 
             case WM_DESTROY:
-                s_instance?.StopTickTimer();
+                _instance?.StopTickTimer();
                 PostQuitMessage(0);
                 return IntPtr.Zero;
 
@@ -1413,8 +1413,8 @@ public sealed class DCompResultWindow
             _bgmTargetVolume = Math.Clamp(props.MusicVolume / 100.0, 0.0, 1.0);
             _bgmFadeSec = Math.Max(0.1, props.BgmFadeDuration);
             _bgmCurrentVolume = 0.0;
-            _bgmFadingIn = true;
-            _bgmFadingOut = false;
+            _isBgmFadingIn = true;
+            _isBgmFadingOut = false;
 
             _bgmPlayer.MediaEnded -= OnBgmEnded;
             _bgmPlayer.MediaEnded += OnBgmEnded;
@@ -1433,9 +1433,9 @@ public sealed class DCompResultWindow
     {
         try
         {
-            if (_bgmPlayer != null && !_bgmFadingOut)
+            if (_bgmPlayer != null && !_isBgmFadingOut)
             {
-                var props = ConfigCache.GetFRWProps();
+                var props = ConfigCache.GetFrwProps();
                 _bgmPlayer.Position = TimeSpan.FromSeconds(Math.Max(0.0, props.BgmStartTime));
                 _bgmPlayer.Play();
             }
@@ -1448,13 +1448,13 @@ public sealed class DCompResultWindow
         if (_bgmPlayer == null) return;
 
         double step = 16.0 / Math.Max(1.0, _bgmFadeSec * 1000.0);
-        if (_bgmFadingIn && !_bgmFadingOut)
+        if (_isBgmFadingIn && !_isBgmFadingOut)
         {
             _bgmCurrentVolume = Math.Min(_bgmTargetVolume, _bgmCurrentVolume + _bgmTargetVolume * step);
             _bgmPlayer.Volume = _bgmCurrentVolume;
-            if (_bgmCurrentVolume >= _bgmTargetVolume - 0.001) _bgmFadingIn = false;
+            if (_bgmCurrentVolume >= _bgmTargetVolume - 0.001) _isBgmFadingIn = false;
         }
-        else if (_bgmFadingOut)
+        else if (_isBgmFadingOut)
         {
             _bgmCurrentVolume = Math.Max(0.0, _bgmCurrentVolume - Math.Max(0.0001, _bgmCurrentVolume * step));
             _bgmPlayer.Volume = _bgmCurrentVolume;
@@ -1474,7 +1474,7 @@ public sealed class DCompResultWindow
         catch { }
         _bgmPlayer = null;
         _bgmCurrentVolume = 0.0;
-        _bgmFadingIn = false;
-        _bgmFadingOut = false;
+        _isBgmFadingIn = false;
+        _isBgmFadingOut = false;
     }
 }

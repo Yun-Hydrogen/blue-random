@@ -22,7 +22,7 @@ namespace BlueRandom.Services;
 public static class WindowsSystemService
 {
     private const string ArgElevatedAdmin = "--elevatedadmin";
-    private const string ArgElevatedUia = "--elevateduia";
+    private const string ArgElevatedUiAccess = "--elevateduia";
 
     /// <summary>
     /// 静态构造函数。
@@ -253,15 +253,15 @@ public static class WindowsSystemService
     /// </para>
     /// </summary>
     /// <param name="args">命令行参数数组。</param>
-    /// <param name="requireUia">配置是否开启 UIAccess 桌面穿透置顶。</param>
+    /// <param name="requireUiAccess">配置是否开启 UIAccess 桌面穿透置顶。</param>
     /// <returns>若成功拉起新 UIAccess 实例且当前进程应退出返回 true，否则返回 false。</returns>
-    public static bool HandleUiAccessElevation(string[] args, bool requireUia)
+    public static bool HandleUiAccessElevation(string[] args, bool requireUiAccess)
     {
-        if (!requireUia) return false;
+        if (!requireUiAccess) return false;
         if (IsProcessUiAccess()) return false; // 已具备 UIA 权限
 
         // 若带有 --elevateduia 但仍未具备，则静默继续并记录日志，严禁死循环
-        if (Array.Exists(args, a => string.Equals(a, ArgElevatedUia, StringComparison.OrdinalIgnoreCase)))
+        if (Array.Exists(args, a => string.Equals(a, ArgElevatedUiAccess, StringComparison.OrdinalIgnoreCase)))
         {
             AppLogger.Warn("WinSys", "检测到 --elevateduia 标志但未获取到 UIAccess 权限，跳过继续运行。");
             return false;
@@ -286,7 +286,7 @@ public static class WindowsSystemService
             }
 
             uint sessionId = WTSGetActiveConsoleSessionId();
-            string cmdLine = $"\"{exePath}\" {ArgElevatedUia}";
+            string cmdLine = $"\"{exePath}\" {ArgElevatedUiAccess}";
 
             AppLogger.Info("WinSys", "正在通过 uiaccess.dll 启动 UIAccess 进程...");
             bool ok = StartUIAccessProcess(exePath, cmdLine, 0, IntPtr.Zero, sessionId);

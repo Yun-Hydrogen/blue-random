@@ -220,7 +220,7 @@
       <div v-if="updateStatus" class="cfg-hint" :class="updateStatus">{{ updateTitle }}</div>
       <!-- 使用 rizui-md 简约只读模式读取 changelog.md -->
       <div v-if="updateDetail" class="update-detail-md">
-        <rizui_md
+        <RizuiMd
           :model-value="updateDetail"
           readonly
           height="auto"
@@ -282,8 +282,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, rizui_mdeditor, openURL } from 'riz-ui'
 
-/* 将 rizui_mdeditor 别名为 rizui_md 以支持简约 Markdown 组件使用 */
-const rizui_md = rizui_mdeditor
+/* 将 rizui_mdeditor 别名为 RizuiMd 以支持简约 Markdown 组件使用 */
+const RizuiMd = rizui_mdeditor
 
 /* Tab 主题色 */
 const tabTheme = '#aa88dd'

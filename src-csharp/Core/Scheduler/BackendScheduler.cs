@@ -3,7 +3,7 @@
 // 命名空间: BlueRandom.Core.Scheduler
 // 作用: 核心业务仲裁与状态调度引擎（Backend Scheduler）。
 //       驱动抽卡流程状态机（互斥锁、12 秒丢帧自愈看门狗）、悬浮窗坐标 600ms 防抖落盘、
-//       顶层 Z 序防遮挡探测与配置面板实时热重载广播（ApplyNewProp）。
+//       顶层 Z 序防遮挡探测与配置面板实时热重载广播（ApplyProps）。
 // ==============================================================================
 
 using System;
@@ -246,8 +246,8 @@ public static class BackendScheduler
     /// </summary>
     public static void RefreshLastResultWindow()
     {
-        var props = ConfigCache.GetFRWProps();
-        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ApplyNewProp", props));
+        var props = ConfigCache.GetFrwProps();
+        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ApplyProps", props));
 
         LrwShowPayload? payload = null;
         if (props.ShowLastResult)
@@ -314,7 +314,7 @@ public static class BackendScheduler
     /// 2. 班级名单同步：若指定了 activeClassId，自动同步更新 classes_{id}.json 名单仓储；
     /// 3. 持久化落盘：将配置写入 config.yaml；
     /// 4. 内存快照热更新：更新 ConfigCache.Current 并规范化字段边界；
-    /// 5. 热重载广播（ApplyNewProp）：向 FCB 和 FRW 发送更新通知，实现无需重启界面实时变动；
+    /// 5. 热重载广播（ApplyProps）：向 FCB 和 FRW 发送更新通知，实现无需重启界面实时变动；
     /// 6. 容错回滚：若校验或写入抛出异常，自动读取 ConfigCache 中的旧有效配置并通过 OverwriteConfig 回滚前端输入框。
     /// </para>
     /// </summary>
@@ -355,13 +355,13 @@ public static class BackendScheduler
             AppLogger.Info("Backend", "已从配置面板应用新配置并刷新 ConfigCache");
 
             // 5. 热重载广播下发
-            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyNewProp", ConfigCache.GetFCBProps()));
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyProps", ConfigCache.GetFcbProps()));
             IpcBroker.Send(IpcMessage.Create(
                 IpcAction.Get,
                 IpcModule.Fcb,
                 "ApplyDefaultPickCount",
                 ConfigCache.Current.PickCountDialog.DefaultCount));
-            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyNewProp", ConfigCache.GetFRWProps()));
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyProps", ConfigCache.GetFrwProps()));
             RefreshLastResultWindow();
             return true;
         }
@@ -404,7 +404,7 @@ public static class BackendScheduler
             }
 
             // 安全关闭
-            IpcBroker.Send(IpcMessage.Create(IpcAction.Dest, IpcModule.Ipc, "Destroy"));
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Destroy, IpcModule.Ipc, "Destroy"));
             Environment.Exit(0);
         }
         catch (Exception ex)

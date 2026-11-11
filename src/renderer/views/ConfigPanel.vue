@@ -86,8 +86,8 @@
   组件         | Props                                    | Emits
   -------------|------------------------------------------|------------------------------
   TabRoster    | studentList, allowRepeatDraw             | update:studentList, update:allowRepeatDraw, chip-hover, chip-leave
-  TabFloating  | fb (floatingButton), pickCount (抽取人数) | update:fb, update:pickCount
-  TabResult    | pickResult (pickResultDialog 配置对象)    | update:pickResult
+  TabFloating  | floatingButton, pickCountDialog (抽取人数) | update:floatingButton, update:pickCountDialog
+  TabResult    | pickResultDialog                          | update:pickResultDialog
   TabAdvanced  | admin, appInfo, updateLoading/Status/Title/Detail | update:admin + 7 个操作事件
   TabAbout     | appInfo                                  | （无，纯展示组件）
   TabLogs      | appInfo                                  | （无，纯展示组件）
@@ -210,15 +210,15 @@
         />
         <TabFloating
           v-show="activeTab === 'floating'"
-          :fb="draft.floatingButton"
-          :pick-count="draft.pickCountDialog"
-          @update:fb="draft.floatingButton = $event"
-          @update:pickCount="draft.pickCountDialog = $event"
+          :floating-button="draft.floatingButton"
+          :pick-count-dialog="draft.pickCountDialog"
+          @update:floatingButton="draft.floatingButton = $event"
+          @update:pickCountDialog="draft.pickCountDialog = $event"
         />
         <TabResult
           v-show="activeTab === 'result'"
-          :pickResult="draft.pickResultDialog"
-          @update:pickResult="draft.pickResultDialog = $event"
+          :pick-result-dialog="draft.pickResultDialog"
+          @update:pickResultDialog="draft.pickResultDialog = $event"
         />
         <TabAdvanced
           v-show="activeTab === 'advanced'"

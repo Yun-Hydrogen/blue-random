@@ -69,7 +69,7 @@ public static class StartupPipeline
 
         // 先预读轻量配置以判断是否开启了提权开关（不触发写回迁移）
         bool requireAdmin = false;
-        bool requireUia = false;
+        bool requireUiAccess = false;
         try
         {
             string cfgPath = YamlConfigService.GetConfigFilePath();
@@ -77,7 +77,7 @@ public static class StartupPipeline
             {
                 var tempCfg = YamlConfigService.LoadConfig(autoMigrate: false);
                 requireAdmin = tempCfg.Admin.RequireAdminOnLaunch;
-                requireUia = tempCfg.Admin.UiAccessEnabled;
+                requireUiAccess = tempCfg.Admin.UiAccessEnabled;
             }
         }
         catch
@@ -86,7 +86,7 @@ public static class StartupPipeline
         }
 
         // 1. 管理员提权检查 (UIAccess 必须依赖管理员权限前置，若开启 UIA 也一并申请管理员)
-        if (WindowsSystemService.HandleAdminElevation(args, requireAdmin || requireUia))
+        if (WindowsSystemService.HandleAdminElevation(args, requireAdmin || requireUiAccess))
         {
             AppLogger.Info("Pipeline", "已发起管理员提权重启尝试");
             splash.UpdateProgress(20, "正在以管理员权限重启应用...");
@@ -98,7 +98,7 @@ public static class StartupPipeline
         await Task.Delay(150);
 
         // 2. UIAccess 提权检查
-        if (WindowsSystemService.HandleUiAccessElevation(args, requireUia))
+        if (WindowsSystemService.HandleUiAccessElevation(args, requireUiAccess))
         {
             splash.UpdateProgress(30, "正在以 UIAccess 权限重启应用...");
             AppLogger.Info("Pipeline", "已发起 UIAccess 提权，当前启动器进程即将退出");

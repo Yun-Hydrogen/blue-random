@@ -15,14 +15,14 @@
     结果暂留浮窗 | 抽取结束后在屏幕右上角保留本次结果，可手动关闭
     音效控制     | 抽取音效开关与音量；背景音乐上传（customs）与开关/音量/起始位置/淡入淡出
 
-  数据流：父组件 ConfigPanel 通过 :pickResult 传入配置对象，
-          本组件通过 $emit('update:pickResult', ...) 上报修改。
+  数据流：父组件 ConfigPanel 通过 :pickResultDialog 传入配置对象，
+          本组件通过 $emit('update:pickResultDialog', ...) 上报修改。
 
 ================================================================================
   二、Props / Emits
 ================================================================================
-  pickResult  — 抽取结果配置对象（来自父组件 draft.pickResult）
-  emit('update:pickResult') — 通知父组件更新配置
+  pickResultDialog  — 抽取结果配置对象（来自父组件 draft.pickResultDialog）
+  emit('update:pickResultDialog') — 通知父组件更新配置
 
   注意：必须传递完整新对象（展开原对象 + 覆盖修改字段），
         不可直接修改 props 的属性。
@@ -70,15 +70,15 @@
     <rizui_card title="浮窗外观" desc="调整抽取结果浮窗的视觉样式" icon="fa-solid fa-eye">
       <!-- 背景色 -->
       <rizui_cfgrow label="浮窗背景颜色" hint="结果浮窗的整体底色">
-        <rizui_colorpicker v-model="pickResult.panelBgColor" :color="tabTheme" teleport=".config-left" />
+        <rizui_colorpicker v-model="pickResultDialog.panelBgColor" :color="tabTheme" teleport=".config-left" />
       </rizui_cfgrow>
       <!-- 边框色 -->
       <rizui_cfgrow label="浮窗边框颜色" hint="结果浮窗的外框描边颜色">
-        <rizui_colorpicker v-model="pickResult.panelBorderColor" :color="tabTheme" teleport=".config-left" />
+        <rizui_colorpicker v-model="pickResultDialog.panelBorderColor" :color="tabTheme" teleport=".config-left" />
       </rizui_cfgrow>
       <!-- 透明度滑块：内部存储 0-1，UI 显示 10-100% -->
       <rizui_cfgrow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明">
-        <rizui_slider :model-value="opacityPercent" :min="10" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResult',{...pickResult,panelOpacity:$event/100})" />
+        <rizui_slider :model-value="opacityPercent" :min="10" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,panelOpacity:$event/100})" />
       </rizui_cfgrow>
       <rizui_infobox 
         type="error"
@@ -93,32 +93,32 @@
     <rizui_card title="结果暂留浮窗" desc="抽取结束后在屏幕右上角保留本次结果" icon="fa-solid fa-thumbtack">
       <rizui_cfgrow label="启用结果暂留浮窗" hint="开启后，抽取结束会在屏幕右上角显示本次抽取结果；点按浮窗上的 ✕ 可暂时关闭">
         <rizui_switch
-          :model-value="pickResult.showLastResult === true"
+          :model-value="pickResultDialog.showLastResult === true"
           :color="tabTheme"
-          @update:model-value="$emit('update:pickResult',{...pickResult,showLastResult:$event})"
+          @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,showLastResult:$event})"
         />
       </rizui_cfgrow>
-      <rizui_cfgrow label="浮窗背景颜色" hint="结果暂留浮窗的整体底色" :disabled="!pickResult.showLastResult">
-        <rizui_colorpicker v-model="pickResult.lastResultBgColor" :color="tabTheme" teleport=".config-left" />
+      <rizui_cfgrow label="浮窗背景颜色" hint="结果暂留浮窗的整体底色" :disabled="!pickResultDialog.showLastResult">
+        <rizui_colorpicker v-model="pickResultDialog.lastResultBgColor" :color="tabTheme" teleport=".config-left" />
       </rizui_cfgrow>
-      <rizui_cfgrow label="浮窗边框颜色" hint="结果暂留浮窗的外框描边颜色" :disabled="!pickResult.showLastResult">
-        <rizui_colorpicker v-model="pickResult.lastResultBorderColor" :color="tabTheme" teleport=".config-left" />
+      <rizui_cfgrow label="浮窗边框颜色" hint="结果暂留浮窗的外框描边颜色" :disabled="!pickResultDialog.showLastResult">
+        <rizui_colorpicker v-model="pickResultDialog.lastResultBorderColor" :color="tabTheme" teleport=".config-left" />
       </rizui_cfgrow>
-      <rizui_cfgrow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明" :disabled="!pickResult.showLastResult">
+      <rizui_cfgrow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明" :disabled="!pickResultDialog.showLastResult">
         <rizui_slider
           :model-value="lastResultOpacityPercent"
           :min="10" :max="100"
           :color="tabTheme" display="%"
-          @update:model-value="$emit('update:pickResult',{...pickResult,lastResultOpacity:$event/100})"
+          @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,lastResultOpacity:$event/100})"
         />
       </rizui_cfgrow>
-      <rizui_cfgrow label="自动关闭时长" hint="0 表示不自动关闭；大于 0 时浮窗底部显示随时间收缩的进度条" :disabled="!pickResult.showLastResult">
+      <rizui_cfgrow label="自动关闭时长" hint="0 表示不自动关闭；大于 0 时浮窗底部显示随时间收缩的进度条" :disabled="!pickResultDialog.showLastResult">
         <rizui_slider
-          :model-value="pickResult.lastResultAutoCloseSeconds ?? 0"
+          :model-value="pickResultDialog.lastResultAutoCloseSeconds ?? 0"
           :min="0" :max="100" :step="1"
           :color="tabTheme"
           :display-value="autoCloseDisplay"
-          @update:model-value="$emit('update:pickResult',{...pickResult,lastResultAutoCloseSeconds:$event})"
+          @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,lastResultAutoCloseSeconds:$event})"
         />
       </rizui_cfgrow>
       <rizui_infobox text="暂留浮窗会在下一次抽取开始时自动隐藏，抽取结束后从屏幕右缘滑入重新显示；关闭开关会立即滑出隐藏。自动关闭进度条从每次显示时开始计时。" />
@@ -143,11 +143,11 @@
 
       <!-- 抽取音效开关（未上传时禁用） -->
       <rizui_cfgrow label="播放抽取音效" :hint="playGachaHint" :disabled="!hasGachaSound">
-        <rizui_switch :model-value="hasGachaSound && pickResult.defaultPlayGachaSound" :color="tabTheme" :disabled="!hasGachaSound" @update:model-value="$emit('update:pickResult',{...pickResult,defaultPlayGachaSound:$event})" />
+        <rizui_switch :model-value="hasGachaSound && pickResultDialog.defaultPlayGachaSound" :color="tabTheme" :disabled="!hasGachaSound" @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,defaultPlayGachaSound:$event})" />
       </rizui_cfgrow>
       <!-- 音效音量 -->
       <rizui_cfgrow label="抽取音效音量" hint="提示音的响度百分比" :disabled="!hasGachaSound">
-        <rizui_slider :model-value="pickResult.soundVolume || 80" :min="0" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResult',{...pickResult,soundVolume:$event})" />
+        <rizui_slider :model-value="pickResultDialog.soundVolume || 80" :min="0" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,soundVolume:$event})" />
       </rizui_cfgrow>
       <!-- BGM 资源：上传 / 移除（存于 customs/ 目录，默认无背景音乐） -->
       <rizui_cfgrow label="背景音乐" :hint="bgmHint" stack>
@@ -162,15 +162,15 @@
 
       <!-- BGM 开关（未上传时禁用） -->
       <rizui_cfgrow label="播放抽取音乐" :hint="playMusicHint" :disabled="!hasBgm">
-        <rizui_switch :model-value="hasBgm && pickResult.playMusic" :color="tabTheme" :disabled="!hasBgm" @update:model-value="$emit('update:pickResult',{...pickResult,playMusic:$event})" />
+        <rizui_switch :model-value="hasBgm && pickResultDialog.playMusic" :color="tabTheme" :disabled="!hasBgm" @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,playMusic:$event})" />
       </rizui_cfgrow>
       <!-- BGM 音量 -->
       <rizui_cfgrow label="抽取音乐音量" hint="背景音乐的响度百分比" :disabled="!hasBgm">
-        <rizui_slider :model-value="pickResult.musicVolume || 60" :min="0" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResult',{...pickResult,musicVolume:$event})" />
+        <rizui_slider :model-value="pickResultDialog.musicVolume || 60" :min="0" :max="100" :color="tabTheme" display="%" @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,musicVolume:$event})" />
       </rizui_cfgrow>
       <!-- BGM 起始秒数，时间轴 max 跟随音乐时长 -->
       <rizui_cfgrow label="播放起始位置" :hint="'BGM 从指定秒数开始播放（' + formatTime(bgmStartClamped) + ' / ' + formatTime(bgmDuration) + '）'" stack :disabled="!hasBgm">
-        <rizui_timeline :model-value="bgmStartClamped" :min="0" :max="bgmMaxTime" :color="tabTheme" @update:model-value="$emit('update:pickResult',{...pickResult,bgmStartTime:$event})" />
+        <rizui_timeline :model-value="bgmStartClamped" :min="0" :max="bgmMaxTime" :color="tabTheme" @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,bgmStartTime:$event})" />
         <div style="margin-top: 6px;">
           <button class="preview-btn" @click="previewBgm" :style="{ color: tabTheme, borderColor: tabTheme }" :disabled="!hasBgm">
             <i class="fa-solid" :class="previewPlaying ? 'fa-stop' : 'fa-play'"></i>
@@ -180,7 +180,7 @@
       </rizui_cfgrow>
       <!-- BGM 淡入淡出渐变秒数 -->
       <rizui_cfgrow label="淡入淡出时长" hint="BGM 开始和结束时的渐变过渡秒数" :disabled="!hasBgm">
-        <rizui_slider :model-value="pickResult.bgmFadeDuration || 1.5" :min="0.5" :max="5" :step="0.1" :color="tabTheme" :display-value="(pickResult.bgmFadeDuration || 1.5).toFixed(1) + 's'" @update:model-value="$emit('update:pickResult',{...pickResult,bgmFadeDuration:$event})" />
+        <rizui_slider :model-value="pickResultDialog.bgmFadeDuration || 1.5" :min="0.5" :max="5" :step="0.1" :color="tabTheme" :display-value="(pickResultDialog.bgmFadeDuration || 1.5).toFixed(1) + 's'" @update:model-value="$emit('update:pickResultDialog',{...pickResultDialog,bgmFadeDuration:$event})" />
       </rizui_cfgrow>
     </rizui_card>
   </div>
@@ -198,8 +198,8 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { rizui_card, rizui_cfgrow, rizui_switch, rizui_slider, rizui_timeline, rizui_colorpicker, rizui_text, rizui_button, rizui_infobox } from 'riz-ui'
 import { resolveAssetUrl } from '@/utils/asset'
 
-const props = defineProps({ pickResult: Object })
-const emit = defineEmits(['update:pickResult'])
+const props = defineProps({ pickResultDialog: Object })
+const emit = defineEmits(['update:pickResultDialog'])
 
 /* Tab 主题色 */
 const tabTheme = '#55cc99'
@@ -208,16 +208,16 @@ const tabTheme = '#55cc99'
  * 透明度转换：config 中存储为 0-1 小数（panelOpacity），UI 滑条使用 10-100 整数。
  * rizui_slider 的 @update:model-value 中直接 $event/100 转回小数并 emit。
  */
-const opacityPercent = computed(() => Math.round((props.pickResult.panelOpacity || 0.9) * 100))
+const opacityPercent = computed(() => Math.round((props.pickResultDialog.panelOpacity || 0.9) * 100))
 
 /* 结果暂留浮窗透明度：config 存 0-1，UI 显示 10-100% */
 const lastResultOpacityPercent = computed(() =>
-  Math.round((props.pickResult.lastResultOpacity ?? 0.9) * 100)
+  Math.round((props.pickResultDialog.lastResultOpacity ?? 0.9) * 100)
 )
 
 /* 自动关闭时长显示：0 表示不自动关闭 */
 const autoCloseDisplay = computed(() => {
-  const seconds = Number(props.pickResult.lastResultAutoCloseSeconds) || 0
+  const seconds = Number(props.pickResultDialog.lastResultAutoCloseSeconds) || 0
   return seconds <= 0 ? '不自动关闭' : `${seconds}s`
 })
 
@@ -248,19 +248,19 @@ const previewAudio = ref(null)
 const previewPlaying = ref(false)
 
 /* 是否已上传背景音乐（决定 BGM 调整项是否可用） */
-const hasBgm = computed(() => !!props.pickResult.bgmCustomId)
+const hasBgm = computed(() => !!props.pickResultDialog.bgmCustomId)
 /* BGM 时长（秒），来自 customs 资源的 duration 字段 */
 const bgmDuration = computed(() => Number(bgmInfo.value?.duration) || 0)
 /* 时间轴最大秒数：跟随音乐时长（至少 1s，无 BGM 时回退 120s） */
 const bgmMaxTime = computed(() => Math.max(1, Math.ceil(bgmDuration.value || 120)))
 /* 起始位置钳制：不超过音乐时长（防止切歌后越界） */
 const bgmStartClamped = computed(() => {
-  const t = Number(props.pickResult.bgmStartTime) || 0
+  const t = Number(props.pickResultDialog.bgmStartTime) || 0
   return Math.min(t, bgmMaxTime.value)
 })
 
 /* 文本框显示：已上传 → 文件名；未上传 → 占位提示 */
-const bgmDisplay = computed(() => bgmInfo.value?.fileName || props.pickResult.bgmCustomId || '')
+const bgmDisplay = computed(() => bgmInfo.value?.fileName || props.pickResultDialog.bgmCustomId || '')
 const bgmPlaceholder = computed(() => hasBgm.value ? '已上传背景音乐' : '请上传背景音乐')
 
 /* 背景音乐行 hint：状态 + 时长 */
@@ -277,7 +277,7 @@ const playMusicHint = computed(() => hasBgm.value
  * 按 bgmCustomId 从 customs/ 拉取 BGM 元数据，并缓存试听 data URL。
  */
 async function loadBgmInfo() {
-  const id = props.pickResult.bgmCustomId
+  const id = props.pickResultDialog.bgmCustomId
   if (!id) { bgmInfo.value = null; bgmPreviewUrl.value = ''; return }
   try {
     const c = await window.configPanelApi?.getCustom?.({ id })
@@ -295,8 +295,8 @@ async function loadBgmInfo() {
       bgmInfo.value = { id: c.id, fileName: c.fileName || '', duration }
       /* 新时长小于当前起始位置时回退到 0 */
       const max = Math.max(1, Math.ceil(duration || 0))
-      if (Number(props.pickResult.bgmStartTime) > max) {
-        emit('update:pickResult', { ...props.pickResult, bgmStartTime: 0 })
+      if (Number(props.pickResultDialog.bgmStartTime) > max) {
+        emit('update:pickResultDialog', { ...props.pickResultDialog, bgmStartTime: 0 })
       }
     } else {
       bgmInfo.value = null
@@ -313,8 +313,8 @@ onMounted(() => {
   loadBgmInfo()
   loadGachaInfo()
 })
-watch(() => props.pickResult.bgmCustomId, () => { loadBgmInfo() })
-watch(() => props.pickResult.gachaSoundCustomId, () => { loadGachaInfo() })
+watch(() => props.pickResultDialog.bgmCustomId, () => { loadBgmInfo() })
+watch(() => props.pickResultDialog.gachaSoundCustomId, () => { loadGachaInfo() })
 
 /**
  * 利用 HTMLAudioElement 探针探测音频时长与可解码性。
@@ -375,7 +375,7 @@ async function handleBgmPick(e) {
           fileName: file.name || 'bgm',
           duration: Math.round(duration * 10) / 10
         }
-        emit('update:pickResult', { ...props.pickResult, bgmCustomId: res.id })
+        emit('update:pickResultDialog', { ...props.pickResultDialog, bgmCustomId: res.id })
       } else {
         console.error('暂存背景音乐失败', res)
       }
@@ -397,7 +397,7 @@ function removeBgm() {
   stopPreview()
   bgmInfo.value = null
   bgmPreviewUrl.value = ''
-  emit('update:pickResult', { ...props.pickResult, bgmCustomId: '', playMusic: false })
+  emit('update:pickResultDialog', { ...props.pickResultDialog, bgmCustomId: '', playMusic: false })
 }
 
 /**
@@ -405,7 +405,7 @@ function removeBgm() {
  */
 async function previewBgm() {
   if (previewPlaying.value) { stopPreview(); return }
-  if (!props.pickResult.bgmCustomId) return
+  if (!props.pickResultDialog.bgmCustomId) return
   if (!bgmPreviewUrl.value) await loadBgmInfo()
   if (!bgmPreviewUrl.value) return
   try {
@@ -413,7 +413,7 @@ async function previewBgm() {
     audio.src = bgmPreviewUrl.value
     audio.loop = false
     audio.currentTime = Number(bgmStartClamped.value) || 0
-    audio.volume = Math.max(0.01, Math.min(1, (props.pickResult.musicVolume || 60) / 100))
+    audio.volume = Math.max(0.01, Math.min(1, (props.pickResultDialog.musicVolume || 60) / 100))
     await audio.play().catch(() => {})
     previewPlaying.value = true
     audio.onended = () => { previewPlaying.value = false }
@@ -435,10 +435,10 @@ const gachaPreviewAudio = ref(null)
 const gachaPreviewPlaying = ref(false)
 
 /* 是否已上传抽取音效（决定开关/音量是否可用） */
-const hasGachaSound = computed(() => !!props.pickResult.gachaSoundCustomId)
+const hasGachaSound = computed(() => !!props.pickResultDialog.gachaSoundCustomId)
 
 /* 文本框 / hint 显示 */
-const gachaDisplay = computed(() => gachaInfo.value?.fileName || props.pickResult.gachaSoundCustomId || '')
+const gachaDisplay = computed(() => gachaInfo.value?.fileName || props.pickResultDialog.gachaSoundCustomId || '')
 const gachaPlaceholder = computed(() => hasGachaSound.value ? '已上传抽取音效' : '请上传抽取音效（默认无）')
 const gachaHint = computed(() => hasGachaSound.value
   ? `已上传：${gachaInfo.value?.fileName || ''}`
@@ -451,7 +451,7 @@ const playGachaHint = computed(() => hasGachaSound.value
  * 按 gachaSoundCustomId 从 customs/ 拉取抽取音效信息并缓存试听 data URL。
  */
 async function loadGachaInfo() {
-  const id = props.pickResult.gachaSoundCustomId
+  const id = props.pickResultDialog.gachaSoundCustomId
   if (!id) { gachaInfo.value = null; gachaPreviewUrl.value = ''; return }
   try {
     const c = await window.configPanelApi?.getCustom?.({ id })
@@ -502,7 +502,7 @@ async function handleGachaPick(e) {
       if (res?.ok && res.id) {
         /* 同步写入信息：文本框立即显示文件名 */
         gachaInfo.value = { id: res.id, fileName: file.name || 'gacha-sound' }
-        emit('update:pickResult', { ...props.pickResult, gachaSoundCustomId: res.id })
+        emit('update:pickResultDialog', { ...props.pickResultDialog, gachaSoundCustomId: res.id })
       } else {
         console.error('暂存抽取音效失败', res)
       }
@@ -524,7 +524,7 @@ function removeGachaSound() {
   stopGachaPreview()
   gachaInfo.value = null
   gachaPreviewUrl.value = ''
-  emit('update:pickResult', { ...props.pickResult, gachaSoundCustomId: '', defaultPlayGachaSound: false })
+  emit('update:pickResultDialog', { ...props.pickResultDialog, gachaSoundCustomId: '', defaultPlayGachaSound: false })
 }
 
 /**
@@ -532,14 +532,14 @@ function removeGachaSound() {
  */
 async function previewGachaSound() {
   if (gachaPreviewPlaying.value) { stopGachaPreview(); return }
-  if (!props.pickResult.gachaSoundCustomId) return
+  if (!props.pickResultDialog.gachaSoundCustomId) return
   if (!gachaPreviewUrl.value) await loadGachaInfo()
   if (!gachaPreviewUrl.value) return
   try {
     const audio = gachaPreviewAudio.value || (gachaPreviewAudio.value = new Audio())
     audio.src = gachaPreviewUrl.value
     audio.loop = false
-    audio.volume = Math.max(0.01, Math.min(1, (props.pickResult.soundVolume || 80) / 100))
+    audio.volume = Math.max(0.01, Math.min(1, (props.pickResultDialog.soundVolume || 80) / 100))
     await audio.play().catch(() => {})
     gachaPreviewPlaying.value = true
     audio.onended = () => { gachaPreviewPlaying.value = false }

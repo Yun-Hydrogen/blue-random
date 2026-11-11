@@ -23,7 +23,7 @@ public class WindowsSystemTests
     /// 验证 uiaccess.dll 路径获取与物理存在性检测，确保提权与反黑屏能力正常就绪
     /// </summary>
     [Fact]
-    public void TestUiAccessDllDetection()
+    public void UiAccessDll_Detection_ReturnsConsistentValue()
     {
         // 验证 uiaccess.dll 路径获取与存在性检测
         string path = WindowsSystemService.GetUiAccessDllPath();
@@ -36,7 +36,7 @@ public class WindowsSystemTests
     /// 验证 NativeBridge 向上层前端导出的应用宿主环境元数据（版本、代号、UiAccess 状态）
     /// </summary>
     [Fact]
-    public void TestNativeBridgeAppInfoJson()
+    public void NativeBridge_AppInfoJson_ContainsExpectedFields()
     {
         // 构造 NativeBridge (传入 null hostWindow 仅测试 GetAppInfoJson)
         var bridge = new NativeBridge(null!);
@@ -64,7 +64,7 @@ public class WindowsSystemTests
     /// 验证日志历史读取与 JSON 数组序列化结构规范
     /// </summary>
     [Fact]
-    public void TestNativeBridgeLogsJsonOrdering()
+    public void NativeBridge_LogsJson_OrdersNewestFirst()
     {
         var bridge = new NativeBridge(null!);
         string json = bridge.GetLogsJson(10);

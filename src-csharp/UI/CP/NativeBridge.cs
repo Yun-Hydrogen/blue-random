@@ -97,13 +97,13 @@ public class NativeBridge
             var cfg = YamlConfigService.LoadConfig();
             ClassManagerService.EnsureInitialized(cfg);
             ConfigCache.Current = YamlConfigService.Normalize(cfg);
-            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyNewProp", ConfigCache.GetFCBProps()));
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ApplyProps", ConfigCache.GetFcbProps()));
             IpcBroker.Send(IpcMessage.Create(
                 IpcAction.Get,
                 IpcModule.Fcb,
                 "ApplyDefaultPickCount",
                 ConfigCache.Current.PickCountDialog.DefaultCount));
-            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyNewProp", ConfigCache.GetFRWProps()));
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyProps", ConfigCache.GetFrwProps()));
             BackendScheduler.RefreshLastResultWindow();
         }
         return ok;
@@ -117,7 +117,7 @@ public class NativeBridge
     /// 获取包含所有班级列表及当前激活班级 ID 的 JSON 序列化字符串。
     /// </summary>
     /// <returns>JSON 响应文本。</returns>
-    public string ListClassesJson()
+    public string GetClassesJson()
     {
         var classes = ClassManagerService.ListClasses();
         string activeId = ConfigCache.Current.ActiveClassId;
@@ -143,7 +143,7 @@ public class NativeBridge
     /// </summary>
     /// <param name="name">班级显示名称。</param>
     /// <returns>包含操作状态及班级完整实体的 JSON 字符串。</returns>
-    public string CreateClass(string name)
+    public string CreateClassJson(string name)
     {
         var cls = ClassManagerService.CreateClass(name);
         ConfigCache.Current.ActiveClassId = cls.ClassId;
@@ -208,7 +208,7 @@ public class NativeBridge
     /// <param name="base64">文件的 Base64 编码数据。</param>
     /// <param name="duration">若为音视频资源，提供其播放时长（秒）。</param>
     /// <returns>保存后的 CustomResourceItem JSON 字符串；失败返回 "null"。</returns>
-    public string SaveCustomResource(string fileName, string mimeType, string purpose, string base64, double duration)
+    public string SaveCustomResourceJson(string fileName, string mimeType, string purpose, string base64, double duration)
     {
         var item = CustomsStore.SaveCustom(fileName, mimeType, purpose, base64, duration);
         return item != null ? JsonSerializer.Serialize(item, JsonOptions) : "null";

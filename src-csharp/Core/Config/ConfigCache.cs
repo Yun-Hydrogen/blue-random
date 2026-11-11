@@ -81,7 +81,7 @@ public static class ConfigCache
     /// 获取当前悬浮按钮（FCB）的外观与交互配置对象。
     /// </summary>
     /// <returns>悬浮按钮配置实例。</returns>
-    public static FloatingButtonConfig GetFCBProps()
+    public static FloatingButtonConfig GetFcbProps()
     {
         lock (_lock)
         {
@@ -93,7 +93,7 @@ public static class ConfigCache
     /// 获取当前抽卡结果展示窗口（FRW）的动画、音效及透明度配置对象。
     /// </summary>
     /// <returns>结果浮窗配置实例。</returns>
-    public static PickResultDialogConfig GetFRWProps()
+    public static PickResultDialogConfig GetFrwProps()
     {
         lock (_lock)
         {

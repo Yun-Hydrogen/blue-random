@@ -87,10 +87,10 @@
 | 线程 | 承载 | 说明 |
 | :--- | :--- | :--- |
 | Backend | `IpcBroker` + `BackendScheduler` | 消费 `Channel<IpcMessage>`，驱动抽卡状态机、配置缓存、防抖保存 |
-| `FCB_UI_Thread` | `FloatingButtonWindow` | WPF 透明置顶悬浮球，独立 `Dispatcher.Run()` |
-| `FRW_UI_Thread` | `DCompResultWindow` | DirectComposition 结果窗，自有 Win32 消息循环 |
-| `LRW_UI_Thread` | `LastResultWindow` | 右上角结果暂留窗，按需 `Show()`，`ShowActivated=False` |
-| `WebUI_Thread` | `ConfigPanelWindow` + WebView2 | 配置面板，首次打开时才初始化 WebView2 |
+| `Fcb_UI_Thread` | `FloatingButtonWindow` | WPF 透明置顶悬浮球，独立 `Dispatcher.Run()` |
+| `Frw_UI_Thread` | `DCompResultWindow` | DirectComposition 结果窗，自有 Win32 消息循环 |
+| `Lrw_UI_Thread` | `LastResultWindow` | 右上角结果暂留窗，按需 `Show()`，`ShowActivated=False` |
+| `Cp_UI_Thread` | `ConfigPanelWindow` + WebView2 | 配置面板，首次打开时才初始化 WebView2 |
 | 主线程 | WPF `Application` | 启动流水线 / Splash / 全局异常兜底 |
 
 关键约束：
@@ -124,7 +124,7 @@
 ### 6.1 模型
 
 ```csharp
-enum IpcAction { Init, Dest, Get, Post }
+enum IpcAction { Init, Destroy, Get, Post }
 enum IpcModule { Ipc, Fcb, Frw, Cp, Lrw }
 
 sealed class IpcMessage
@@ -145,14 +145,14 @@ sealed class IpcMessage
 | FCB | `RandomTriggered` | POST | `int`（1~10） |
 | FCB | `PositionChanged` | POST | `FcbPositionPayload` |
 | FCB | `HideWindow` / `ShowWindow` | GET | `null` |
-| FCB | `ApplyNewProp` | GET | `FloatingButtonConfig` |
+| FCB | `ApplyProps` | GET | `FloatingButtonConfig` |
 | FCB | `ApplyDefaultPickCount` | GET | `int`（1~10） |
 | FRW | `ShowWindow` | GET | `FrwShowPayload`（人数 + 学生列表） |
 | FRW | `WindowClosed` | POST | `List<CalledStudent>` |
-| FRW | `ApplyNewProp` | GET | `PickResultDialogConfig` |
+| FRW | `ApplyProps` | GET | `PickResultDialogConfig` |
 | LRW | `ShowWindow` | GET | `LrwShowPayload`（名单 + 抽取时间） |
 | LRW | `HideWindow` | GET | `null` |
-| LRW | `ApplyNewProp` | GET | `PickResultDialogConfig` |
+| LRW | `ApplyProps` | GET | `PickResultDialogConfig` |
 | CP | `ShowConfigPanel` | GET | `null` |
 | CP | `ConfigSaved` | POST | YAML 字符串 |
 | CP | `OverwriteConfig` | GET | YAML 字符串 |
@@ -189,7 +189,7 @@ sealed class IpcMessage
 
 ### 7.3 落盘
 
-- 前端点"应用"→ `NativeBridge.SaveConfigYaml` → 校验 + `ClassManagerService` 同步 → 写盘 → 广播 `ApplyNewProp`；
+- 前端点"应用"→ `NativeBridge.SaveConfigYaml` → 校验 + `ClassManagerService` 同步 → 写盘 → 广播 `ApplyProps`；
 - 悬浮球拖拽结束 → `ConfigCache` 立即更新 → **约 600ms 防抖**后写盘；
 - 写盘使用 `YamlConfigService.ToYamlWithComments` 生成带中文注释的 YAML；
 - 数值在 `YamlConfigService` 中统一 Clamp（音量 0~100、透明度 0.1~1.0 等）。
@@ -285,8 +285,8 @@ sealed class IpcMessage
 | 分组 | 方法 |
 | :--- | :--- |
 | 配置 | `GetConfigYaml` / `SaveConfigYaml` / `ResetConfig` / `ResetAllConfig` |
-| 班级 | `ListClassesJson` / `CreateClass` / `RenameClass` / `DeleteClass` |
-| 自定义资源 | `SaveCustomResource` / `GetCustomResourceJson` / `DeleteCustomResource` / `PickFile` / `OpenConfigFolder` / `ClearCache` |
+| 班级 | `GetClassesJson` / `CreateClassJson` / `RenameClass` / `DeleteClass` |
+| 自定义资源 | `SaveCustomResourceJson` / `GetCustomResourceJson` / `DeleteCustomResource` / `PickFile` / `OpenConfigFolder` / `ClearCache` |
 | 应用信息 | `GetAppInfoJson` / `CheckUpdateJson` / `GetChangelog` |
 | 权限与系统 | `CreateStartupTask` / `AdminElevate` / `Restart` / `CloseWindow` / `OpenDevTools` / `OpenUrl` |
 | 安全 | `IsSecurityEnabled` / `VerifyPassword` / `SetPassword` / `DisablePassword` |
@@ -357,7 +357,7 @@ npm run build:app
 ### 新增自定义资源类型
 
 1. `CustomsStore` 的 `purpose` 约定与校验；
-2. `NativeBridge.SaveCustomResource` 参数；
+2. `NativeBridge.SaveCustomResourceJson` 参数；
 3. 前端上传/试听/移除流程（参考 `TabResult.vue` 的 staged 暂存机制：应用时才落盘）。
 
 ---
@@ -385,3 +385,4 @@ npm run build:app
 | 2026-10-20 | 移除 ClassIsland 联动播报占位卡片；清理遗留栈与死代码：删除 WPF `ResultWindow`、Web 版 `PickResult.vue` 与 `/pick-result` 路由、`nativeBridgeAdapter` 的 `pickResultApi`、`NativeBridge` 的 `GetPickResultConfigJson` / `GetLastResultsJson` / `ClosePickResult`、仅 FRW 使用的 WebView2 独立环境（`EBWebView_FRW` / `GetFrwEnvironmentAsync` / `GetEnvironmentAsync` 兼容壳），以及 `DCompProbe` 技术原型与 `BLUERANDOM_DCOMP_PROBE` 入口。 |
 | 2026-10-20 | 清理未闭环的 API 与死代码：移除 NativeBridge 未使用的 `LoadClassJson`、`SaveClassJson`、`GetCustomDataUrl` 及前端适配层的 `loadClass`、`saveClass`；移除未引用的 `FcbInitPayload`；移除无生产者的 `WindowOverlaid` IPC 监听分支与 `CloseWindow`（FRW）分支；清理 `ARCHITECTURE.md` 7.3 重复节与 `TabAdvanced.vue` 遗留注释。 |
 | 2026-10-20 | 前端单 chunk 拆分优化：通过 `vite.config.js` 的 `manualChunks` 将 `tab-logs`、`rizui-md`（Markdown 渲染/编辑模块）、`vendor-yaml`、`vendor-vue` 精准拆分，并将 `TabLogs`、`TabAbout`、`TabAdvanced` 异步化；首屏核心 bundle 尺寸从 716 kB 降至 58 kB（降幅 92%），彻底解决 Vite 超过 500 kB 警告并显著提速 WebView2 冷启动。 |
+| 2026-11-11 | 命名规范化（不改变任何运行时行为）：常量统一 `PascalCase`，仅 Win32 字面量保留 `UPPER_SNAKE`（`CARD_MS` → `CardMs` 等 19 项）；静态字段废弃 `s_` 前缀并入 `_camelCase`（`s_hwnd` → `_hwnd`）；模块缩写统一 `Fcb` / `Frw` / `Cp` / `Lrw`（`GetFCBProps` → `GetFcbProps`，线程名 `Fcb_UI_Thread` / `Cp_UI_Thread` 等）；`UI` 统一写作 `Ui`（`_webuiAssets` → `_webUiAssets`、`ArgElevatedUia` → `ArgElevatedUiAccess`）；`IpcAction.Dest` → `Destroy`；IPC 命令 `ApplyNewProp` → `ApplyProps`；`NativeBridge` 补齐 JSON 后缀（`ListClassesJson` → `GetClassesJson`、`CreateClass` → `CreateClassJson`、`SaveCustomResource` → `SaveCustomResourceJson`）；前端 props 去缩写（`fb` → `floatingButton`、`pickCount` → `pickCountDialog`、`pickResult` → `pickResultDialog`）与组件别名 `rizui_md` → `RizuiMd`。同步新增 `agents/DevelopNotice.md` 命名规范速查表，并在 `src-csharp/.editorconfig` 声明 `suggestion` 级命名规则。 |

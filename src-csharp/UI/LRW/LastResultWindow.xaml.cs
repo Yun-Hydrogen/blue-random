@@ -44,7 +44,7 @@ public partial class LastResultWindow : Window
 
         FontFamily = ResourceCache.CustomFont;
         IpcBroker.Subscribe(IpcModule.Lrw, OnIpcMessageReceived);
-        ApplyProps(ConfigCache.GetFRWProps());
+        ApplyProps(ConfigCache.GetFrwProps());
     }
 
     private void OnIpcMessageReceived(IpcMessage msg)
@@ -62,7 +62,7 @@ public partial class LastResultWindow : Window
                     HideWindow();
                     break;
 
-                case "ApplyNewProp":
+                case "ApplyProps":
                     if (msg.Payload is PickResultDialogConfig props) ApplyProps(props);
                     break;
 
@@ -88,7 +88,7 @@ public partial class LastResultWindow : Window
         try
         {
             // 每次显示前同步最新样式与自动关闭时长
-            ApplyProps(ConfigCache.GetFRWProps());
+            ApplyProps(ConfigCache.GetFrwProps());
 
             var students = payload.CalledStudents ?? new List<CalledStudent>();
 

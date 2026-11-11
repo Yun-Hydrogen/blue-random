@@ -6,7 +6,7 @@
 // 架构说明：
 //   当前只有配置面板（CP）继续使用 WebView2；结果浮窗已改为原生 DirectComposition
 //   渲染，不再需要 WebView2 环境与独立的 userDataFolder（EBWebView_FRW）。
-//   CP 环境在 WebUI_Thread 中惰性初始化，避免 COM 套间与 userDataFolder 互斥锁冲突。
+//   CP 环境在 Cp_UI_Thread 中惰性初始化，避免 COM 套间与 userDataFolder 互斥锁冲突。
 // ==============================================================================
 
 using System;

@@ -2,3 +2,41 @@
 
 # CS8632: 只能在 "#nullable" 注释上下文内的代码中使用可为 null 的引用类型的注释。
 dotnet_diagnostic.CS8632.severity = silent
+
+# ============================================================================
+#  命名规范（详见 agents/DevelopNotice.md）
+#  级别统一为 suggestion：不阻塞构建，仅在 IDE 中以灰点提示，防止约定回潮。
+# ============================================================================
+
+# ---- 私有实例 / 静态字段：_camelCase ----
+dotnet_naming_rule.private_fields_underscore_camel.severity = suggestion
+dotnet_naming_rule.private_fields_underscore_camel.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore_camel.style = underscore_camel
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+# ---- 常量：PascalCase ----
+# 注：与 Win32 头文件逐字对应的常量（WM_* / WS_* / SW_* / IDC_* 等）保留
+#     UPPER_SNAKE，因此这里刻意不提升为 warning，避免大量预期外提示。
+dotnet_naming_rule.constants_pascal.severity = suggestion
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal_style
+
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = *
+dotnet_naming_symbols.constants.required_modifiers = const
+
+dotnet_naming_style.pascal_style.capitalization = pascal_case
+
+# ---- 局部变量与参数：camelCase ----
+dotnet_naming_rule.locals_camel.severity = suggestion
+dotnet_naming_rule.locals_camel.symbols = locals_and_params
+dotnet_naming_rule.locals_camel.style = camel_style
+
+dotnet_naming_symbols.locals_and_params.applicable_kinds = local, parameter
+
+dotnet_naming_style.camel_style.capitalization = camel_case

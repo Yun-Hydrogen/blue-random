@@ -116,7 +116,7 @@
 
     <!-- 版本更新日志 (changelog.md) -->
     <rizui_card v-if="changelogText" title="更新日志" desc="当前版本更新历史记录 (changelog.md)" icon="fa-solid fa-clock-rotate-left">
-      <rizui_md :model-value="changelogText" readonly height="auto" />
+      <RizuiMd :model-value="changelogText" readonly height="auto" />
     </rizui_card>
 
   </div>
@@ -127,7 +127,7 @@ import { ref, onMounted } from 'vue'
 import { rizui_card, rizui_mdeditor } from 'riz-ui'
 import { resolveAssetUrl } from '@/utils/asset'
 
-const rizui_md = rizui_mdeditor
+const RizuiMd = rizui_mdeditor
 const props = defineProps({ appInfo: Object })
 const changelogText = ref('')
 

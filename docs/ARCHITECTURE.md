@@ -273,9 +273,9 @@ flowchart LR
 
 - **扩展 API 能力清单与协议约定**：
   - `GetConfigYaml()` / `SaveConfigYaml(yaml)`: 现行配置读取与即时热生效保存（同步将名单写入当前激活班级文件）
-  - `ListClassesJson()`: 读取所有班级配置并自动回填 `activeClassId`，统一 camelCase 序列化
-  - `CreateClass(name)` / `RenameClass(...)` / `DeleteClass(...)`: 班级库 CRUD，自动管理激活班级迁移
-  - `SaveCustomResource(...)` / `GetCustomResourceJson(...)` / `DeleteCustomResource(...)`: 素材管理
+  - `GetClassesJson()`: 读取所有班级配置并自动回填 `activeClassId`，统一 camelCase 序列化
+  - `CreateClassJson(name)` / `RenameClass(...)` / `DeleteClass(...)`: 班级库 CRUD，自动管理激活班级迁移
+  - `SaveCustomResourceJson(...)` / `GetCustomResourceJson(...)` / `DeleteCustomResource(...)`: 素材管理
   - `GetLogsJson(maxLines)`: 将后端文件与控制台日志实时格式化提供给前端“运行日志”标签
   - `GetFloatingPositionJson()`: 实时读取悬浮球屏幕物理坐标同步回填前端
   - `CreateStartupTask(name, path, admin)`: 调用系统 `schtasks.exe` 创建开机启动计划任务

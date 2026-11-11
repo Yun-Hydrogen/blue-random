@@ -27,7 +27,7 @@ public class UpdateServiceTests
     [InlineData("2.0.1", "2.0.0", 1)]
     [InlineData("2.0.0", "2.0.1", -1)]
     [InlineData("10.0.0", "9.9.9", 1)]
-    public void TestCompareVersions(string v1, string v2, int expected)
+    public void CompareVersions_ReturnsExpectedOrder(string v1, string v2, int expected)
     {
         int result = UpdateService.CompareVersions(v1, v2);
         Assert.Equal(expected, result);
@@ -42,7 +42,7 @@ public class UpdateServiceTests
     [InlineData("v26.09.01", "26.09.01", null)]
     [InlineData("26.08.01", "26.08.01", null)]
     [InlineData("v2.0.0", "2.0.0", null)]
-    public void TestParseTag(string tag, string expectedVersion, string? expectedCodename)
+    public void ParseTag_SplitsVersionAndCodename(string tag, string expectedVersion, string? expectedCodename)
     {
         var (version, codename) = UpdateService.ParseTag(tag);
         Assert.Equal(expectedVersion, version);
@@ -53,7 +53,7 @@ public class UpdateServiceTests
     /// 验证当远端版本高于本地版本时，正确构建状态为 "update" 的升级提示载荷
     /// </summary>
     [Fact]
-    public void TestBuildResultWhenUpdateAvailable()
+    public void BuildResult_UpdateAvailable_SetsFlags()
     {
         var res = UpdateService.BuildResultFromTag(
             remoteTag: "Shiroko-v26.11.01",
@@ -74,7 +74,7 @@ public class UpdateServiceTests
     /// 验证当本地版本与远端版本一致时，正确构建状态为 "ok" 的已是最新载荷
     /// </summary>
     [Fact]
-    public void TestBuildResultWhenUpToDate()
+    public void BuildResult_UpToDate_SetsFlags()
     {
         var res = UpdateService.BuildResultFromTag(
             remoteTag: "Shiroko-v26.10.01",
@@ -93,7 +93,7 @@ public class UpdateServiceTests
     /// 验证当本地版本超前于远端版本（本地开发/未发布预览构建）时，正确构建状态为 "warn" 的预览版本载荷
     /// </summary>
     [Fact]
-    public void TestBuildResultWhenLocalIsAhead()
+    public void BuildResult_LocalAhead_SetsFlags()
     {
         var res = UpdateService.BuildResultFromTag(
             remoteTag: "v26.09.01",
