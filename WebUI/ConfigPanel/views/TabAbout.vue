@@ -14,8 +14,6 @@
 ================================================================================
   - 修改版权信息时确保与 LICENSE 文件一致
   - 外部链接通过 window.open 或 shell.openExternal 打开
-
-  最后更新：2026-08-29
     - 打包后 Logo 失效：src="/image/BlueRandom.png" 绝对路径在 file:// 下解析失败，
       改用 resolveAssetUrl 按协议拼接完整 URL
 ================================================================================
@@ -114,11 +112,6 @@
 
     <rizui_card title="本项目为蔚蓝档案爱好者创作(Fan-Make)项目，请不要用于商业用途" :title-style="{'text-align':'center'}" :desc-style="{'textAlign':'center'}" desc="Code with ❤️ and AI by YunHydrogenP-云氢P | 惠州一中算法AI社&智能信息社"/>
 
-    <!-- 版本更新日志 (changelog.md) -->
-    <rizui_card v-if="changelogText" title="更新日志" desc="当前版本更新历史记录 (changelog.md)" icon="fa-solid fa-clock-rotate-left">
-      <RizuiMd :model-value="changelogText" readonly height="auto" />
-    </rizui_card>
-
   </div>
 </template>
 
@@ -129,15 +122,7 @@ import { resolveAssetUrl } from '@/utils/asset'
 
 const RizuiMd = rizui_mdeditor
 const props = defineProps({ appInfo: Object })
-const changelogText = ref('')
 
-onMounted(async () => {
-  if (window.configPanelApi?.getChangelog) {
-    try {
-      changelogText.value = await window.configPanelApi.getChangelog()
-    } catch (_) { }
-  }
-})
 </script>
 
 <style scoped>

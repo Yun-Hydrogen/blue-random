@@ -1,7 +1,7 @@
 {
   "name": "blue-random",
-  "version": "26.10.04",
-  "codename": "Midori",
+  "version": "26.11.01",
+  "codename": "Momoi",
   "private": true,
   "scripts": {
     "dev": "npm --prefix WebUI run dev",
