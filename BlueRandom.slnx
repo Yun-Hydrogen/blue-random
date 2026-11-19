@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/Main/">
-    <Project Path="Main/BlueRandom.csproj" />
-  </Folder>
-  <Folder Name="/Tests/">
-    <Project Path="Tests/BlueRandom.Tests/BlueRandom.Tests.csproj" />
-  </Folder>
-</Solution>
