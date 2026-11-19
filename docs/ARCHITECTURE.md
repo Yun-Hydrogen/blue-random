@@ -98,7 +98,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     DiskYaml["磁盘存储 (config.yaml)"] <-->|启动反序列化 / 600ms 防抖写入| CCache["Config Cache (配置缓存)"]
-    Assets["磁盘静态素材 (public/ & customs/)"] -->|启动预加载 / 预解码冻结| RCache["Resource Cache (资源缓存)"]
+    Assets["磁盘静态素材 (Resources/ & customs/)"] -->|启动预加载 / 预解码冻结| RCache["Resource Cache (资源缓存)"]
 
     CCache -->|纳秒级读取| Backend["抽卡状态机 & 调度器"]
     CCache -->|推送最新样式| FCB["FCB 悬浮按钮"]
@@ -120,7 +120,7 @@ flowchart LR
 ### 3.2 Resource Cache (资源缓存)
 - **定位**：运行时展示所需的美术、音频及字体句柄集合。
 - **预载与优化策略**：
-  - **字体缓存**：在应用启动阶段（Stage 3）通过 WPF `FontFamily` 预加载 `public/fonts/UI.ttf`（南西新圆体），界面渲染直接引用内存字体实例。
+  - **字体缓存**：在应用启动阶段（Stage 3）通过 WPF `FontFamily` 预加载 `Resources/fonts/UI.ttf`（南西新圆体），界面渲染直接引用内存字体实例。
   - **信封纹理**：将 `Letter_Rainbow.png`（彩信封）、`Letter_Gold.png`（金信封）、`Letter_Blue.png`（蓝信封）预解码为 WPF `BitmapImage` 并执行 `Freeze()` 冻结。冻结后的位图不可修改且天然跨线程安全，可同时供各 STA 线程直接绘制，避免重复解码与显存颠簸。
   - **音效流缓存**：将按钮点击音效 `button_click.wav` 读入内存字节缓冲，点击即可即时触发音频播放。
 
@@ -207,7 +207,7 @@ flowchart TD
 
 ### 6.2 原生结果演播浮窗 (@FRW - Floating Result Window)
 
-> 当前实际实现为 [DCompResultWindow.cs](../src-csharp/UI/FRW/DCompResultWindow.cs)（DirectComposition + D3D11 + Direct2D，单 surface 即时模式渲染）；下方 WPF 图层参数描述的是同一视觉规范。
+> 当前实际实现为 [DCompResultWindow.cs](../Main/Views/ResultWindow/DCompResultWindow.cs)（DirectComposition + D3D11 + Direct2D，单 surface 即时模式渲染）；下方 WPF 图层参数描述的是同一视觉规范。
 
 - **视觉风格与舞台**：
   - 全屏透明置顶覆盖层，背景采用通透全屏层（`#02000000`），点击任意空白区域或按下 `Esc` / `Space` / `Enter` 键平滑淡出关闭。
@@ -258,7 +258,7 @@ flowchart TD
   );
   WebViewControl.Source = new Uri("https://appassets/index.html#/config-panel");
   ```
-  通过将 `dist/` 映射为标准 `https://appassets/` 虚拟安全源，实现 Vite ES 模块、静态资源与 NativeBridge 的秒开加载与无感通信。
+  通过将 `WebUI/dist/` 映射为标准 `https://appassets/` 虚拟安全源，实现 Vite ES 模块、静态资源与 NativeBridge 的秒开加载与无感通信。
 
 ### 7.3 NativeBridge 资产直连机制与多班级同步
 不同于抽卡指令需要跨总线协调，多班级数据（`~/.blue random/classes/`）、自定义资源文件（`~/.blue random/customs/`）以及系统交互**完全由承载 WebView2 的 C# 宿主通过 `NativeBridge` COM 对象直连处理**：

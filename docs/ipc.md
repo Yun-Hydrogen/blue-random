@@ -285,7 +285,7 @@ public class NativeBridge
 
 ## 四、 前端适配层 API 规范 (`window.configPanelApi`)
 
-前端在 `src/renderer/bridge/nativeBridgeAdapter.js` 中将 COM 宿主对象包装为纯异步 Promise 风格的 API，消除了 COM 原生数据类型转换细节，并在 C# 宿主缺失时提供纯前端开发调试兜底。
+前端在 `WebUI/ConfigPanel/bridge/nativeBridgeAdapter.js` 中将 COM 宿主对象包装为纯异步 Promise 风格的 API，消除了 COM 原生数据类型转换细节，并在 C# 宿主缺失时提供纯前端开发调试兜底。
 
 ### 4.1 `window.configPanelApi` 接口对照表
 

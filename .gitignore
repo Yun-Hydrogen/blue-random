@@ -1,5 +1,5 @@
-/node_modules
-/dist
+/WebUI/node_modules
+/WebUI/dist
 **/bin/
 **/obj/
 *.user

@@ -1,8 +1,8 @@
 <Solution>
-  <Folder Name="/src-csharp/">
-    <Project Path="src-csharp/BlueRandom.csproj" />
+  <Folder Name="/Main/">
+    <Project Path="Main/BlueRandom.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/BlueRandom.Tests/BlueRandom.Tests.csproj" />
+  <Folder Name="/Tests/">
+    <Project Path="Tests/BlueRandom.Tests/BlueRandom.Tests.csproj" />
   </Folder>
 </Solution>

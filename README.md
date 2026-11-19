@@ -1,5 +1,5 @@
 <center>
-<img src='/public/image/BlueRandom.png'>
+<img src='/Resources/image/BlueRandom.png'>
 
 # Blue Random | 蔚蓝点名
 </center>
@@ -36,23 +36,32 @@
 
 ```
 ├── docs/                     系统架构与跨线程 IPC 通信协议设计文档
-├── public/                   静态资源（图片、音效、字体）
-│   ├── image/                Logo、立绘装饰、默认图标
-│   ├── sound/                音效
-│   └── fonts/                UI.ttf 字体文件
-├── src-csharp/               .NET 10 C# 宿主与原生 WPF UI
-│   ├── Core/                 核心领域逻辑 (配置缓存、无锁IPC通道、抽卡算法、调度器)
-│   ├── Services/             班级管理、安全凭据、原生托盘、系统特权与窗口调度
-│   └── UI/                   各独立 STA 线程窗口 (FCB 悬浮球、FRW 演播窗、LRW 暂留窗、CP 配置面板宿主、Splash)
-├── src/renderer/             WebUI 前端管理后台 (Vue 3 + Vite + riz-ui)
-│   ├── bridge/               nativeBridgeAdapter (WebView2 宿主直连适配)
-│   ├── composables/          配置面板状态机与业务逻辑
-│   ├── views/                各配置选项卡页面
-│   └── main.js               Vue 应用入口
-├── tests/                    xUnit 自动化单元测试套件
+├── Main/                     .NET 10 C# 宿主
+│   ├── Views/                纯渲染视图（XAML + 布局 / 动画 / 绘制）
+│   │   ├── ConfigPanel/      配置面板窗口宿主
+│   │   ├── FloatingButton/   悬浮按钮窗口
+│   │   ├── ResultWindow/     DComp 结果演播窗
+│   │   ├── LastResultWindow/ 结果暂留浮窗
+│   │   └── Splash/           启动器窗口
+│   └── Modules/              功能模块
+│       ├── Initializer/      启动流水线与系统特权
+│       ├── WebUIBridger/     WebView2 宿主与 NativeBridge
+│       ├── RandomProvider/   抽卡算法、调度器、名单与结果音效
+│       ├── ConfigProvider/   YAML 配置、缓存与安全凭据
+│       ├── ResourceProvider/ 资源缓存与自定义资源
+│       ├── ApiBridge/        IPC 通道与更新检查
+│       ├── WindowsManager/   多 STA 窗口调度、托盘与视图控制器
+│       └── Common/           日志与版本信息
+├── WebUI/
+│   ├── ConfigPanel/          Vue 3 配置面板 (Vite 构建到 WebUI/dist)
+│   ├── dist/                 前端构建产物（编译时内嵌）
+│   ├── package.json          前端依赖与构建脚本
+│   └── vite.config.js        Vite 构建配置
+├── Resources/                静态资源（图片、音效、字体）
+├── Tests/BlueRandom.Tests/   xUnit 自动化单元测试套件
+├── Scripts/                  构建 / 测试 / 发布 / 清理脚本
 ├── third_party/              第三方依赖 (RunUIAccess 等)
-├── package.json              前端依赖配置
-├── vite.config.js            Vite 构建配置
+├── package.json              版本号、版本代号与脚本入口
 └── BlueRandom.sln            .NET 解决方案
 ```
 
@@ -72,8 +81,8 @@
 
 ## 许可证 📄
 
-- 除项目 **/public/** 下的图片和音效资源，项目使用 **AGPLv3** 许可证。
-- 项目 **/public/** 下的图片和音效资源由各自版权方所有，使用时请注意授权和范围。
+- 除项目 **/Resources/** 下的图片和音效资源，项目使用 **AGPLv3** 许可证。
+- 项目 **/Resources/** 下的图片和音效资源由各自版权方所有，使用时请注意授权和范围。
 - 背景音乐与抽取音效为版权资源，**不随仓库分发**；请用户自行准备，上传后存储于本地 customs/ 目录。
 - UiAccess.dll 来自 [RunUIAccess](https://github.com/shc0743/RunUIAccess)，使用 MIT 协议 [License](/THIRD_PARTY_NOTICES/RunUIAccess-MIT.txt)
 

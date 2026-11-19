@@ -1,3 +1,13 @@
+## 未发布
+
+**架构重构:**
+
+1. 项目结构扁平化：`src-csharp` → `Main`，`src/renderer` → `WebUI/ConfigPanel`，`public` → `Resources`，`tests` → `Tests`，新增 `Scripts/`。
+2. `Main` 按职责拆分为 `Views/`（仅布局与渲染）与 `Modules/`（Initializer、WebUIBridger、RandomProvider、ConfigProvider、ResourceProvider、ApiBridge、WindowsManager、Common）。
+3. 前端依赖与 `node_modules` 收归 `WebUI`，根 `package.json` 仅保留版本、版本代号与脚本；Vite 产物输出至 `WebUI/dist`。
+4. 视图业务逻辑下沉到模块：配置面板 WebView2 宿主、悬浮按钮控制器、结果窗音频播放器、结果暂留浮窗数据映射与自动关闭控制器、自定义图标加载。
+5. 新增内嵌资源清单回归测试，防止资源目录调整后运行期静默丢图。
+
 **[Version]** 26.10.04 
 
 **[codename]** Midori

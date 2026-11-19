@@ -12,7 +12,7 @@
 | 名称 | 蔚蓝点名 / Blue Random |
 | 定位 | 仿《蔚蓝档案》学员招募动画的桌面随机点名工具 |
 | 版本 | `26.10.04`，代号 `Midori`（来源：[package.json](../package.json)） |
-| 许可 | AGPLv3；`public/` 下的图片与音效版权归各自所有方，BGM/音效不随仓库分发 |
+| 许可 | AGPLv3；`Resources/` 下的图片与音效版权归各自所有方，BGM/音效不随仓库分发 |
 | 技术栈 | .NET 10 (C# / WPF) + WebView2 + Vue 3 + Vite + riz-ui |
 | 历史 | 早期为 Electron 项目（目录名仍为 `ba_random_electron`），现已整体重构为单进程 C# 宿主 |
 
@@ -27,7 +27,7 @@
 
 ## 2. 运行数据目录
 
-当前代码默认写入 `%UserProfile%\.blue random`（见 [YamlConfigService.GetUserDataDir](../src-csharp/Services/YamlConfigService.cs)），可用环境变量 `BLUERANDOM_USER_DATA_DIR` 覆盖。
+当前代码默认写入 `%UserProfile%\.blue random`（见 [YamlConfigService.GetUserDataDir](../Main/Modules/ConfigProvider/YamlConfigService.cs)），可用环境变量 `BLUERANDOM_USER_DATA_DIR` 覆盖。
 
 ```
 ~/.blue random/
@@ -48,31 +48,34 @@
 
 ```
 ├── docs/                   架构与 IPC 协议文档（ARCHITECTURE.md / ipc.md）
-├── public/                 静态素材（字体、图片、音效），编译时内嵌
-├── src/
-│   └── renderer/           Vue 3 配置面板（Vite 构建到 dist/）
-│       ├── bridge/         nativeBridgeAdapter.js：WebView2 宿主对象封装
-│       ├── composables/    useConfigPanel.js：配置草稿与全部业务操作
-│       ├── views/          ConfigPanel + 5 个 Tab + TabLogs
-│       └── router/         hash 路由：/config-panel
-├── src-csharp/
-│   ├── Core/
-│   │   ├── Config/         ConfigModel / ConfigCache
-│   │   ├── Ipc/            IpcBroker / IpcMessages
-│   │   ├── Lottery/        LotteryEngine（纯领域算法）
-│   │   ├── Resources/      ResourceCache（字体/信封/音频内存缓存）
-│   │   ├── Scheduler/      BackendScheduler（状态机 + 防抖落盘 + 广播）
-│   │   └── Logging/        AppLogger
-│   ├── Services/           ClassManager / CustomsStore / Security / Tray /
-│   │                       Update / WebViewEnvironment / WindowManager /
-│   │                       WindowsSystem / YamlConfigService
-│   └── UI/
-│       ├── FCB/            悬浮按钮（WPF）
-│       ├── FRW/            结果浮窗（DCompResultWindow）
-│       ├── LRW/            结果暂留浮窗（LastResultWindow，右上角常驻）
-│       ├── CP/             配置面板宿主 + NativeBridge
-│       └── Splash/         启动器窗口与五阶段流水线
-├── tests/BlueRandom.Tests/ xUnit 单元测试
+├── Resources/              静态素材（字体、图片、音效），编译时内嵌
+├── WebUI/
+│   ├── ConfigPanel/        Vue 3 配置面板源码（Vite root）
+│   │   ├── bridge/         nativeBridgeAdapter.js：WebView2 宿主对象封装
+│   │   ├── composables/    useConfigPanel.js：配置草稿与全部业务操作
+│   │   ├── views/          ConfigPanel + 5 个 Tab + TabLogs
+│   │   └── router/         hash 路由：/config-panel
+│   ├── dist/               Vite 构建产物（编译时内嵌）
+│   ├── package.json        WebUI 依赖、node_modules 与构建脚本
+│   └── vite.config.js      Vite 构建配置
+├── Main/
+│   ├── Views/              纯渲染视图（不承载数据处理）
+│   │   ├── ConfigPanel/    配置面板窗口宿主
+│   │   ├── FloatingButton/ 悬浮按钮（WPF）
+│   │   ├── ResultWindow/   结果浮窗（DCompResultWindow）
+│   │   ├── LastResultWindow/ 结果暂留浮窗（右上角常驻）
+│   │   └── Splash/         启动器窗口
+│   └── Modules/
+│       ├── Initializer/    StartupPipeline / WindowsSystemService
+│       ├── WebUIBridger/   ConfigPanelBrowserHost / NativeBridge / WebView 环境
+│       ├── RandomProvider/ LotteryEngine / BackendScheduler / ClassManager / 结果音效
+│       ├── ConfigProvider/ ConfigModel / ConfigCache / YamlConfigService / Security
+│       ├── ResourceProvider/ ResourceCache / CustomsStore / 自定义图标加载
+│       ├── ApiBridge/      IpcBroker / IpcMessages / UpdateService
+│       ├── WindowsManager/ WindowManager / TrayService / 各视图控制器
+│       └── Common/         AppLogger / AppVersion
+├── Tests/BlueRandom.Tests/ xUnit 单元测试
+├── Scripts/                build / test / publish / clean 脚本
 ├── third_party/            uiaccess.dll（RunUIAccess, MIT）
 ├── publish/                单文件发布输出
 └── BlueRandom.sln(x)       .NET 解决方案
@@ -102,7 +105,7 @@
 
 ## 5. 启动流水线
 
-[StartupPipeline.cs](../src-csharp/UI/Splash/StartupPipeline.cs) 的 Stage 0~5：
+[StartupPipeline.cs](../Main/Modules/Initializer/StartupPipeline.cs) 的 Stage 0~5：
 
 1. **Stage 0**：初始化 `AppLogger`、解析基准路径；
 2. **Stage 1**：管理员 / UIAccess 权限仲裁；通过 `--elevatedadmin` / `--elevateduia` 标记防止提权死循环；
@@ -171,7 +174,7 @@ sealed class IpcMessage
 
 ## 7. 配置模型与持久化
 
-### 7.1 模型（[ConfigModel.cs](../src-csharp/Core/Config/ConfigModel.cs)）
+### 7.1 模型（[ConfigModel.cs](../Main/Modules/ConfigProvider/ConfigModel.cs)）
 
 `RootConfig`：
 
@@ -202,7 +205,7 @@ sealed class IpcMessage
 
 ---
 
-## 8. 抽卡算法（[LotteryEngine.cs](../src-csharp/Core/Lottery/LotteryEngine.cs)）
+## 8. 抽卡算法（[LotteryEngine.cs](../Main/Modules/RandomProvider/LotteryEngine.cs)）
 
 ### 8.1 允许重复
 
@@ -224,7 +227,7 @@ sealed class IpcMessage
 
 ## 9. 结果浮窗（DCompResultWindow，现役）
 
-[文件](../src-csharp/UI/FRW/DCompResultWindow.cs)
+[文件](../Main/Views/ResultWindow/DCompResultWindow.cs)
 
 ### 9.1 窗口与渲染
 
@@ -256,7 +259,7 @@ sealed class IpcMessage
 
 ### 9.4 结果暂留浮窗（LRW）
 
-- 代码：[LastResultWindow.xaml](../src-csharp/UI/LRW/LastResultWindow.xaml) / [LastResultWindow.xaml.cs](../src-csharp/UI/LRW/LastResultWindow.xaml.cs)
+- 代码：[LastResultWindow.xaml](../Main/Views/LastResultWindow/LastResultWindow.xaml) / [LastResultWindow.xaml.cs](../Main/Views/LastResultWindow/LastResultWindow.xaml.cs)
 - 开关：`pickResultDialog.showLastResult`（配置面板「结果浮窗 → 结果暂留浮窗」）
 - 数据流：
   1. `DCompResultWindow.FinishClose()` 把 `_students` 作为 `WindowClosed` 的载荷上报；
@@ -273,10 +276,10 @@ sealed class IpcMessage
 
 ## 10. 配置面板（Vue 3）
 
-- 入口：[main.js](../src/renderer/main.js) → `setupNativeBridgeAdapter()` → 挂载路由；
-- 路由：`/config-panel`（[ConfigPanel.vue](../src/renderer/views/ConfigPanel.vue)）；结果演播与暂留浮窗均为原生窗口，不经过 Web 路由；
-- 桥接：[nativeBridgeAdapter.js](../src/renderer/bridge/nativeBridgeAdapter.js) 把 `chrome.webview.hostObjects.nativeBridge` 封装成 `window.configPanelApi`；
-- 状态：[useConfigPanel.js](../src/renderer/composables/useConfigPanel.js) 持有 `draft`（配置草稿）、Tab 导航、tooltip 和全部操作；
+- 入口：[main.js](../WebUI/ConfigPanel/main.js) → `setupNativeBridgeAdapter()` → 挂载路由；
+- 路由：`/config-panel`（[ConfigPanel.vue](../WebUI/ConfigPanel/views/ConfigPanel.vue)）；结果演播与暂留浮窗均为原生窗口，不经过 Web 路由；
+- 桥接：[nativeBridgeAdapter.js](../WebUI/ConfigPanel/bridge/nativeBridgeAdapter.js) 把 `chrome.webview.hostObjects.nativeBridge` 封装成 `window.configPanelApi`；
+- 状态：[useConfigPanel.js](../WebUI/ConfigPanel/composables/useConfigPanel.js) 持有 `draft`（配置草稿）、Tab 导航、tooltip 和全部操作；
 - 页面：TabRoster（名单/权重）、TabFloating（悬浮球）、TabResult（结果窗/音效/BGM）、TabAdvanced（权限/自启/密码/更新）、TabAbout、TabLogs（右侧常驻日志）；
 - 保存链路：`draft` → `saveConfig` → `NativeBridge.SaveConfigYaml` → 后端校验并广播。
 
@@ -298,23 +301,23 @@ sealed class IpcMessage
 ## 11. 构建、运行与测试
 
 ```powershell
-# 前端依赖（riz-ui 从 GitHub tarball 安装）
-npm install
+# 前端依赖（riz-ui 从 GitHub tarball 安装；node_modules 归属 WebUI）
+npm ci --prefix WebUI
 
-# 构建 Vue 配置面板 -> dist/（Release 发布前必须执行）
-npm run build
+# 构建 Vue 配置面板 -> WebUI/dist（Release 发布前必须执行）
+npm run build:vite
 
 # 编译 C#（Debug 开发）
-dotnet build BlueRandom.slnx -c Debug
+dotnet build Main/BlueRandom.csproj -c Debug
 
 # 单元测试
-dotnet test tests\BlueRandom.Tests\BlueRandom.Tests.csproj
+npm test
 
 # 一键发布单文件 exe -> publish/
 npm run build:app
 ```
 
-重要：`BlueRandom.csproj` 通过 `EmbeddedResource` 内嵌 `public/**`、`dist/**`、`package.json`、`changelog.md`、`third_party/uiaccess.dll`。若未先构建 `dist`，发布产物会缺少配置面板页面。
+重要：`BlueRandom.csproj` 通过 `EmbeddedResource` 内嵌 `Resources/**`、`WebUI/dist/**`、`package.json`、`changelog.md`、`third_party/uiaccess.dll`。若未先构建 `WebUI/dist`，发布产物会缺少配置面板页面。
 
 ### 调试用环境变量
 
@@ -324,9 +327,9 @@ npm run build:app
 | `BLUERANDOM_DCOMP_FRW_DEMO=1` | 只运行结果窗 Demo（10 名测试学生） |
 | `BLUERANDOM_DCOMP_DUMP=1` | 导出当前结果窗帧到 `%TEMP%\br_frw_dump.png` |
 
-### 测试覆盖（[tests/BlueRandom.Tests](../tests/BlueRandom.Tests)）
+### 测试覆盖（[Tests/BlueRandom.Tests](../Tests/BlueRandom.Tests)）
 
-`LotteryEngineTests`、`YamlConfigServiceTests`、`ClassManagerTests`、`CustomsStoreTests`、`IpcBrokerTests`、`UpdateServiceTests`、`WindowsSystemTests`、`ArcGeometryTests`、`LrwVisualThemeTests`、`LastResultWindowTests`。当前基线：**68 例全部通过**。
+`LotteryEngineTests`、`YamlConfigServiceTests`、`ClassManagerTests`、`CustomsStoreTests`、`IpcBrokerTests`、`UpdateServiceTests`、`WindowsSystemTests`、`ArcGeometryTests`、`LrwVisualThemeTests`、`LastResultWindowTests`、`EmbeddedResourceTests`。当前基线：**76 例全部通过**。
 
 ---
 
@@ -334,10 +337,10 @@ npm run build:app
 
 ### 新增一个配置项
 
-1. [ConfigModel.cs](../src-csharp/Core/Config/ConfigModel.cs)：加属性 + `YamlMember`；
-2. [YamlConfigService.cs](../src-csharp/Services/YamlConfigService.cs)：默认模板、`ToYamlWithComments`、必要的 Clamp/迁移；
+1. [ConfigModel.cs](../Main/Modules/ConfigProvider/ConfigModel.cs)：加属性 + `YamlMember`；
+2. [YamlConfigService.cs](../Main/Modules/ConfigProvider/YamlConfigService.cs)：默认模板、`ToYamlWithComments`、必要的 Clamp/迁移；
 3. 需要前端读写时：`nativeBridgeAdapter.js` 或 `GetConfigYaml` 已自动覆盖；
-4. [useConfigPanel.js](../src/renderer/composables/useConfigPanel.js)：`draft` 映射与默认值；
+4. [useConfigPanel.js](../WebUI/ConfigPanel/composables/useConfigPanel.js)：`draft` 映射与默认值；
 5. 对应 Tab 组件中加 UI。
 
 ### 新增一条 IPC 命令
@@ -364,12 +367,12 @@ npm run build:app
 
 ## 13. 已知坑与注意事项
 
-1. **资源路径**：WebView2 以 `file://` 加载页面，Vue 中引用 `public/` 资源必须走 `resolveAssetUrl`，不要用 `/image/...` 绝对路径。
+1. **资源路径**：WebView2 以 `file://` 加载页面，Vue 中引用 `Resources/` 资源必须走 `resolveAssetUrl`，不要用 `/image/...` 绝对路径。
 2. **`SetCursor` 只能收真实 HCURSOR**，`IDC_*` 只是 `LoadCursor` 的入参；这是本次忙光标问题的根因。
 3. **`WH_MOUSE_LL` 钩子线程必须保持专职泵消息**，不要合并到渲染线程。
 4. **YAML 注释是产品特性**：手工编辑 `config.yaml` 是预期用法，保存时必须用 `ToYamlWithComments`，不要用裸序列化覆盖。
 5. **配置迁移**：`protocolVersion` 与 `package.json` 的 `codename` 绑定，改协议版本要同时考虑 `YamlConfigService` 的迁移分支与测试。
-6. **版权**：`public/` 下 Blue Archive 素材与字体有独立授权，BGM/抽取音效由用户自行上传，禁止把版权音频提交进仓库。
+6. **版权**：`Resources/` 下 Blue Archive 素材与字体有独立授权，BGM/抽取音效由用户自行上传，禁止把版权音频提交进仓库。
 7. **日志**：`AppLogger.Initialize` 每次冷启动会重置 `log.txt`，不要把需要长期保留的信息只写进日志。
 
 ---
@@ -385,4 +388,5 @@ npm run build:app
 | 2026-10-20 | 移除 ClassIsland 联动播报占位卡片；清理遗留栈与死代码：删除 WPF `ResultWindow`、Web 版 `PickResult.vue` 与 `/pick-result` 路由、`nativeBridgeAdapter` 的 `pickResultApi`、`NativeBridge` 的 `GetPickResultConfigJson` / `GetLastResultsJson` / `ClosePickResult`、仅 FRW 使用的 WebView2 独立环境（`EBWebView_FRW` / `GetFrwEnvironmentAsync` / `GetEnvironmentAsync` 兼容壳），以及 `DCompProbe` 技术原型与 `BLUERANDOM_DCOMP_PROBE` 入口。 |
 | 2026-10-20 | 清理未闭环的 API 与死代码：移除 NativeBridge 未使用的 `LoadClassJson`、`SaveClassJson`、`GetCustomDataUrl` 及前端适配层的 `loadClass`、`saveClass`；移除未引用的 `FcbInitPayload`；移除无生产者的 `WindowOverlaid` IPC 监听分支与 `CloseWindow`（FRW）分支；清理 `ARCHITECTURE.md` 7.3 重复节与 `TabAdvanced.vue` 遗留注释。 |
 | 2026-10-20 | 前端单 chunk 拆分优化：通过 `vite.config.js` 的 `manualChunks` 将 `tab-logs`、`rizui-md`（Markdown 渲染/编辑模块）、`vendor-yaml`、`vendor-vue` 精准拆分，并将 `TabLogs`、`TabAbout`、`TabAdvanced` 异步化；首屏核心 bundle 尺寸从 716 kB 降至 58 kB（降幅 92%），彻底解决 Vite 超过 500 kB 警告并显著提速 WebView2 冷启动。 |
-| 2026-11-11 | 命名规范化（不改变任何运行时行为）：常量统一 `PascalCase`，仅 Win32 字面量保留 `UPPER_SNAKE`（`CARD_MS` → `CardMs` 等 19 项）；静态字段废弃 `s_` 前缀并入 `_camelCase`（`s_hwnd` → `_hwnd`）；模块缩写统一 `Fcb` / `Frw` / `Cp` / `Lrw`（`GetFCBProps` → `GetFcbProps`，线程名 `Fcb_UI_Thread` / `Cp_UI_Thread` 等）；`UI` 统一写作 `Ui`（`_webuiAssets` → `_webUiAssets`、`ArgElevatedUia` → `ArgElevatedUiAccess`）；`IpcAction.Dest` → `Destroy`；IPC 命令 `ApplyNewProp` → `ApplyProps`；`NativeBridge` 补齐 JSON 后缀（`ListClassesJson` → `GetClassesJson`、`CreateClass` → `CreateClassJson`、`SaveCustomResource` → `SaveCustomResourceJson`）；前端 props 去缩写（`fb` → `floatingButton`、`pickCount` → `pickCountDialog`、`pickResult` → `pickResultDialog`）与组件别名 `rizui_md` → `RizuiMd`。同步新增 `agents/DevelopNotice.md` 命名规范速查表，并在 `src-csharp/.editorconfig` 声明 `suggestion` 级命名规则。 |
+| 2026-11-11 | 命名规范化（不改变任何运行时行为）：常量统一 `PascalCase`，仅 Win32 字面量保留 `UPPER_SNAKE`（`CARD_MS` → `CardMs` 等 19 项）；静态字段废弃 `s_` 前缀并入 `_camelCase`（`s_hwnd` → `_hwnd`）；模块缩写统一 `Fcb` / `Frw` / `Cp` / `Lrw`（`GetFCBProps` → `GetFcbProps`，线程名 `Fcb_UI_Thread` / `Cp_UI_Thread` 等）；`UI` 统一写作 `Ui`（`_webuiAssets` → `_webUiAssets`、`ArgElevatedUia` → `ArgElevatedUiAccess`）；`IpcAction.Dest` → `Destroy`；IPC 命令 `ApplyNewProp` → `ApplyProps`；`NativeBridge` 补齐 JSON 后缀（`ListClassesJson` → `GetClassesJson`、`CreateClass` → `CreateClassJson`、`SaveCustomResource` → `SaveCustomResourceJson`）；前端 props 去缩写（`fb` → `floatingButton`、`pickCount` → `pickCountDialog`、`pickResult` → `pickResultDialog`）与组件别名 `rizui_md` → `RizuiMd`。同步新增 `agents/DevelopNotice.md` 命名规范速查表，并在 `Main/.editorconfig` 声明 `suggestion` 级命名规则。 |
+| 2026-11-19 | 目录扁平化与模块化重构（不改变运行时行为）：`src-csharp` → `Main`、`src/renderer` → `WebUI/ConfigPanel`、`public` → `Resources`、`tests` → `Tests`，新增 `Scripts/`；`Main` 拆分为 `Views/`（纯渲染）与 `Modules/`（Initializer / WebUIBridger / RandomProvider / ConfigProvider / ResourceProvider / ApiBridge / WindowsManager / Common）；前端依赖与 `node_modules` 归入 `WebUI`，根 `package.json` 仅保留 `version` / `codename` / `scripts`，Vite 产物输出到 `WebUI/dist`；视图业务逻辑下沉为 `ConfigPanelBrowserHost`、`FloatingButtonController`、`ResultAudioPlayer`、`LastResultPresenter` / `LastResultAutoCloseController`、`CustomIconLoader`；新增内嵌资源清单回归测试。 |

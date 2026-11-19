@@ -62,15 +62,31 @@
 
 ## 五、不可随意改名（外部契约，改名需同步验证）
 
-- **`public/` 下资源文件名** —— `ResourceCache` 按字面量拼路径，改名即找不到文件。
+- **`Resources/` 下资源文件名** —— `ResourceCache` 按字面量拼路径，改名即找不到文件。
 - **`config.yaml` 的 YAML 键** —— 已写入用户磁盘，改名会导致历史配置读不出。
 - **前端 JSON 字段名** —— `nativeBridgeAdapter.js` 直接消费。
-- **`NativeBridge` 公开方法名** —— WebView2 通过 `hostObjects.nativeBridge` 反射调用，改名必须同步 `src/renderer/bridge/nativeBridgeAdapter.js`。
+- **`NativeBridge` 公开方法名** —— WebView2 通过 `hostObjects.nativeBridge` 反射调用，改名必须同步 `WebUI/ConfigPanel/bridge/nativeBridgeAdapter.js`。
 - **IPC 命令字符串** —— 发送方与接收方必须成对修改（均为进程内，无外部兼容负担）。
 - **CSS 类名** —— 模板与 `<style>` 两处必须同步。
 
 ---
 
-## 六、自动化约束
+## 六、目录与模块边界
 
-`src-csharp/.editorconfig` 已声明私有字段、常量、局部变量/参数的命名规则（级别 `suggestion`，不阻塞构建）。Win32 常量会被常量规则标注为建议项，属预期行为。
+| 目录 | 允许放什么 | 禁止放什么 |
+| :--- | :--- | :--- |
+| `Main/Views/` | XAML、布局、动画、绘制、纯视觉事件转发 | 配置解析、算法、音频加载、IPC 业务决策、文件 IO |
+| `Main/Modules/<模块>/` | 该功能的全部状态与逻辑 | XAML 控件引用、窗口可视化代码 |
+| `WebUI/ConfigPanel/` | 单个 WebUI 的 Vue 源码与入口 | 其它 WebUI 的页面、`node_modules`、构建产物 |
+| `WebUI/dist/` | Vite 产物（编译期内嵌，勿手改） | 任何源码 |
+| `Resources/` | 图片、音效、字体等静态资产 | 代码、配置、构建产物 |
+| `Tests/` | xUnit 测试工程 | 业务源码 |
+| `Scripts/` | 构建 / 测试 / 发布 / 清理脚本 | 运行时逻辑 |
+
+新增功能时先判断归属：涉及用户数据、算法或 IO → `Modules`；仅影响呈现 → `Views`；跨模块基础设施 → `Modules/Common`。
+
+---
+
+## 七、自动化约束
+
+`Main/.editorconfig` 已声明私有字段、常量、局部变量/参数的命名规则（级别 `suggestion`，不阻塞构建）。Win32 常量会被常量规则标注为建议项，属预期行为。
