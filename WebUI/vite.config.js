@@ -50,7 +50,11 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5173
+    port: 5173,
+    // 版本号以根 package.json 为单一来源，开发服务器需额外放行仓库根目录
+    fs: {
+      allow: [path.resolve(webUiRoot, '..')]
+    }
   },
   cacheDir: path.resolve(webUiRoot, 'node_modules/.vite')
 })
