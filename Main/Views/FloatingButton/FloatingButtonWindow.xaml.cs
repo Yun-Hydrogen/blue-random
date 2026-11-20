@@ -19,8 +19,10 @@
 // ============================================================================
 
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Media;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -37,10 +39,48 @@ namespace BlueRandom.Views.FloatingButton;
 /// </summary>
 public partial class FloatingButtonWindow : Window
 {
+    private const int GWL_STYLE = -16;
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_MAXIMIZEBOX = 0x00010000;
+    private const int WS_MINIMIZEBOX = 0x00020000;
+    private const int WS_THICKFRAME = 0x00040000;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WM_GETMINMAXINFO = 0x0024;
+    private const int WM_MOUSEACTIVATE = 0x0021;
+    private const int MA_NOACTIVATE = 3;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public POINT ptReserved;
+        public POINT ptMaxSize;
+        public POINT ptMaxPosition;
+        public POINT ptMinTrackSize;
+        public POINT ptMaxTrackSize;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hWnd);
+
     private readonly FloatingButtonController _controller;
     private Point _mouseDownScreenPos;
     private bool _isPressed = false;
     private bool _hasDragged = false;
+    private bool _isRealClose = false;
     private SoundPlayer? _clickSoundPlayer;
 
     /// <summary>
@@ -69,6 +109,16 @@ public partial class FloatingButtonWindow : Window
 
         // 构造函数即刻注册 IPC 消息监听，规避 Loaded 陷阱
         IpcBroker.Subscribe(IpcModule.Fcb, OnIpcMessageReceived);
+        Closed += (_, _) => IpcBroker.Unsubscribe(IpcModule.Fcb, OnIpcMessageReceived);
+
+        // 注入 WS_EX_NOACTIVATE 扩展样式，彻底消除悬浮按钮拖动与点击时的前台焦点抢夺
+        SourceInitialized += OnSourceInitialized;
+
+        // 禁用 WPF 对触摸的系统级长按反馈与手势提升，消除 Windows 触控圆圈与轻扫干扰
+        Stylus.SetIsPressAndHoldEnabled(MainButtonBorder, false);
+        Stylus.SetIsFlicksEnabled(this, false);
+        Stylus.SetIsTapFeedbackEnabled(this, false);
+        Stylus.SetIsTouchFeedbackEnabled(this, false);
 
         MainButtonBorder.MouseEnter += (_, _) =>
         {
@@ -94,6 +144,93 @@ public partial class FloatingButtonWindow : Window
 
         InitAudio();
         Loaded += OnLoaded;
+    }
+
+    /// <summary>
+    /// 注入 Win32 样式与无焦点扩展属性：
+    /// 1. 剥离最大化与可调边框样式，注入 WS_EX_TOOLWINDOW，配合 WM_GETMINMAXINFO 锁定尺寸彻底禁用左右边缘分屏贴靠；
+    /// 2. 注入 WS_EX_NOACTIVATE 并拦截 WM_MOUSEACTIVATE，确保拖动与点击悬浮球绝不抢夺前台放映 PPT 的焦点。
+    /// </summary>
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            // 剥离 WS_MAXIMIZEBOX、WS_MINIMIZEBOX 与 WS_THICKFRAME
+            long style = GetWindowLongPtr(hwnd, GWL_STYLE).ToInt64();
+            style &= ~WS_MAXIMIZEBOX;
+            style &= ~WS_MINIMIZEBOX;
+            style &= ~WS_THICKFRAME;
+            SetWindowLongPtr(hwnd, GWL_STYLE, new IntPtr(style));
+
+            // 注入 WS_EX_TOOLWINDOW（工具窗口不参与分屏）与 WS_EX_NOACTIVATE（无焦点）
+            long exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
+            exStyle |= WS_EX_TOOLWINDOW;
+            exStyle |= WS_EX_NOACTIVATE;
+            SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(exStyle));
+
+            var source = HwndSource.FromHwnd(hwnd);
+            source?.AddHook(WndProc);
+        }
+    }
+
+    /// <summary>
+    /// Win32 消息过滤：
+    /// 1. WM_MOUSEACTIVATE: 拦截激活请求，保持前台原有窗口获得焦点；
+    /// 2. WM_GETMINMAXINFO: 锁定最大追踪尺寸为固定尺寸，阻止 Windows 对悬浮窗进行左右半屏分屏拉伸。
+    /// </summary>
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        switch (msg)
+        {
+            case WM_MOUSEACTIVATE:
+                handled = true;
+                return (IntPtr)MA_NOACTIVATE;
+
+            case WM_GETMINMAXINFO:
+                MINMAXINFO mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
+                uint dpi = GetDpiForWindow(hwnd);
+                double scale = dpi == 0 ? 1.0 : dpi / 96.0;
+                int fixedW = (int)Math.Round(Width * scale);
+                int fixedH = (int)Math.Round(Height * scale);
+                mmi.ptMinTrackSize.X = fixedW;
+                mmi.ptMinTrackSize.Y = fixedH;
+                mmi.ptMaxTrackSize.X = fixedW;
+                mmi.ptMaxTrackSize.Y = fixedH;
+                mmi.ptMaxSize.X = fixedW;
+                mmi.ptMaxSize.Y = fixedH;
+                Marshal.StructureToPtr(mmi, lParam, true);
+                handled = true;
+                return IntPtr.Zero;
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// 拦截 Alt+F4 系统关闭组合键，重定向为隐藏窗口而非销毁。
+    /// </summary>
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.System && e.SystemKey == Key.F4)
+        {
+            e.Handled = true;
+            TogglePicker(false);
+            Hide();
+        }
+    }
+
+    /// <summary>
+    /// 拦截窗体关闭请求，将其重定向为隐藏（Hide），保护窗口实例存活以供托盘随时恢复。
+    /// 仅在收到宿主 Destroy 命令时（_isRealClose 为 true）才允许物理关闭。
+    /// </summary>
+    private void OnWindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (!_isRealClose)
+        {
+            e.Cancel = true;
+            TogglePicker(false);
+            Hide();
+        }
     }
 
     /// <summary>
@@ -376,7 +513,7 @@ public partial class FloatingButtonWindow : Window
     }
 
     // ========================================================================
-    //  拖拽与点击交互
+    //  拖拽与点击交互 (原生平滑 DragMove，通过 WS_EX_TOOLWINDOW 与尺寸锁定禁用左右分屏)
     // ========================================================================
 
     /// <summary>
@@ -400,7 +537,7 @@ public partial class FloatingButtonWindow : Window
     }
 
     /// <summary>
-    /// 鼠标移动事件：超过 4 像素移动阈值时自动触发 Win32 原生平滑拖拽并广播位移。
+    /// 鼠标移动事件：超过 4 像素移动阈值时自动触发 Windows 原生平滑拖拽，并在用户松手后贴紧边缘上报坐标。
     /// </summary>
     private void OnMainButtonMouseMove(object sender, MouseEventArgs e)
     {
@@ -443,7 +580,7 @@ public partial class FloatingButtonWindow : Window
     }
 
     /// <summary>
-    /// 鼠标左键抬起事件：若未发生移动，则判定为单击交互并切换选择器展开状态。
+    /// 鼠标左键抬起事件：若未发生位移，判定为单次点击切换展开/收起。
     /// </summary>
     private void OnMainButtonMouseUp(object sender, MouseButtonEventArgs e)
     {
@@ -458,6 +595,82 @@ public partial class FloatingButtonWindow : Window
             }
             _hasDragged = false;
         }
+    }
+
+    /// <summary>
+    /// 触控按下事件：记录屏幕绝对坐标起点，准备触控拖拽或点击判定。
+    /// </summary>
+    private void OnMainButtonTouchDown(object? sender, TouchEventArgs e)
+    {
+        var touchPoint = e.GetTouchPoint(this);
+        try
+        {
+            _mouseDownScreenPos = PointToScreen(touchPoint.Position);
+        }
+        catch
+        {
+            _mouseDownScreenPos = new Point(Left, Top);
+        }
+        _isPressed = true;
+        _hasDragged = false;
+    }
+
+    /// <summary>
+    /// 触控移动事件：超过 4 像素移动阈值时触发原生拖拽，松手后贴紧边缘上报坐标。
+    /// </summary>
+    private void OnMainButtonTouchMove(object? sender, TouchEventArgs e)
+    {
+        if (_isPressed)
+        {
+            var touchPoint = e.GetTouchPoint(this);
+            Point currentScreenPos;
+            try
+            {
+                currentScreenPos = PointToScreen(touchPoint.Position);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (!_hasDragged && (Math.Abs(currentScreenPos.X - _mouseDownScreenPos.X) > 4 || Math.Abs(currentScreenPos.Y - _mouseDownScreenPos.Y) > 4))
+            {
+                _hasDragged = true;
+                if (_controller.IsPickerOpen) TogglePicker(false);
+                try
+                {
+                    DragMove();
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Warn("FCB", "Touch DragMove 异常: " + ex.Message);
+                }
+
+                _isPressed = false;
+                ClampPosition();
+                var payload = new FcbPositionPayload
+                {
+                    MonitorNumber = 0,
+                    PositionX = (int)Left,
+                    PositionY = (int)Top
+                };
+                IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Fcb, "PositionChanged", payload));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 触控抬起事件：若未发生移动，则判定为单击交互并切换选择器展开状态。
+    /// </summary>
+    private void OnMainButtonTouchUp(object? sender, TouchEventArgs e)
+    {
+        _isPressed = false;
+        if (!_hasDragged)
+        {
+            PlayClickSound();
+            TogglePicker(!_controller.IsPickerOpen);
+        }
+        _hasDragged = false;
     }
 
     /// <summary>
@@ -654,48 +867,75 @@ public partial class FloatingButtonWindow : Window
     /// <param name="msg">IPC 消息包。</param>
     private void OnIpcMessageReceived(IpcMessage msg)
     {
-        Dispatcher.Invoke(() =>
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished || !Dispatcher.Thread.IsAlive)
         {
-            switch (msg.Command)
+            IpcBroker.Unsubscribe(IpcModule.Fcb, OnIpcMessageReceived);
+            return;
+        }
+
+        try
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
             {
-                case "HideWindow":
-                    TogglePicker(false);
-                    Hide();
-                    break;
+                switch (msg.Command)
+                {
+                    case "HideWindow":
+                        TogglePicker(false);
+                        Hide();
+                        break;
 
-                case "ShowWindow":
-                    Show();
-                    var hwnd = new WindowInteropHelper(this).Handle;
-                    WindowsSystemService.RefreshTopMost(hwnd);
-                    break;
+                    case "ShowWindow":
+                        if (!IsVisible)
+                        {
+                            Show();
+                        }
+                        var hwnd = new WindowInteropHelper(this).Handle;
+                        WindowsSystemService.RefreshTopMost(hwnd);
+                        break;
 
-                case "ApplyProps":
-                    if (msg.Payload is FloatingButtonConfig cfg)
-                    {
-                        ApplyProps(cfg);
-                    }
-                    break;
+                    case "ApplyProps":
+                        if (msg.Payload is FloatingButtonConfig cfg)
+                        {
+                            ApplyProps(cfg);
+                        }
+                        break;
 
-                case "ApplyDefaultPickCount":
-                    if (msg.Payload is int count)
-                    {
-                        ApplyDefaultPickCount(count);
-                    }
-                    break;
+                    case "ApplyDefaultPickCount":
+                        if (msg.Payload is int count)
+                        {
+                            ApplyDefaultPickCount(count);
+                        }
+                        break;
 
-                case "MoveNewPosition":
-                    if (msg.Payload is FcbPositionPayload p)
-                    {
-                        Left = p.PositionX;
-                        Top = p.PositionY;
-                        ClampPosition();
-                    }
-                    break;
+                    case "MoveNewPosition":
+                        if (msg.Payload is FcbPositionPayload p)
+                        {
+                            Left = p.PositionX;
+                            Top = p.PositionY;
+                            ClampPosition();
+                        }
+                        break;
 
-                case "Destroy":
-                    Close();
-                    break;
-            }
-        });
+                    case "Destroy":
+                        Destroy();
+                        break;
+                }
+            }));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("FCB", "处理 IPC 消息异常: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 触发窗口真实物理关闭并注销 IPC 监听。
+    /// </summary>
+    internal void Destroy()
+    {
+        _isRealClose = true;
+        IpcBroker.Unsubscribe(IpcModule.Fcb, OnIpcMessageReceived);
+        Closing -= OnWindowClosing;
+        Close();
     }
 }

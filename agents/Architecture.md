@@ -66,8 +66,8 @@ flowchart TD
 
 ### 线程分工与职责说明
 1. **主线程 / 核心调度 (Core / Backend Thread)**: 承载程序生命周期、`IpcBroker` 消息总线、抽卡状态机、加权无偏抽卡算法（`LotteryEngine`）、无锁内存配置缓存（`ConfigCache`）、全内存静态资源缓存（`ResourceCache`）与 500ms 磁盘防抖落盘器。
-2. **悬浮按钮独立线程 (Fcb_UI_Thread - STA)**: 专职承载桌面常驻透明悬浮按钮（`FloatingButtonWindow`），运行高帧率鼠标拖拽、极坐标圆弧排版与 CubicEase 贝塞尔弹性展开动效，不受耗时渲染阻塞。
-3. **结果演播窗独立线程 (Frw_UI_Thread - STA)**: 专职承载 DirectComposition + D3D11 + D2D 透明硬件加速演播窗（`DCompResultWindow`），自有 Win32 消息循环泵与独立 WH_MOUSE_LL 全屏点击关闭钩子线程。
+2. **悬浮按钮独立线程 (Fcb_UI_Thread - STA)**: 专职承载桌面常驻透明悬浮按钮（`FloatingButtonWindow`），运行极坐标圆弧排版、非模态平滑屏幕坐标拖拽、原生触控事件捕获与 CubicEase 贝塞尔弹性展开动效；注入 Win32 `WS_EX_NOACTIVATE` 扩展样式与拦截 `WM_MOUSEACTIVATE`，确保移动与点击悬浮球时绝对不抢占前台全屏放映 PPT 的焦点。
+3. **结果演播窗独立线程 (Frw_UI_Thread - STA)**: 专职承载 DirectComposition + D3D11 + D2D 透明硬件加速演播窗（`DCompResultWindow`），自有 Win32 消息循环泵与独立 WH_MOUSE_LL 全屏点击关闭钩子线程；在弹出前记录前台活动窗口并在关闭后自动精准归还焦点，保障翻页笔操作无缝连贯。
 4. **结果暂留窗独立线程 (Lrw_UI_Thread - STA)**: 专职承载屏幕右上角常驻卡片（`LastResultWindow`），负责平滑滑入滑出动效与线性收缩自动关闭进度条。
 5. **配置面板独立线程 (Cp_UI_Thread - STA)**: 唯一承载设置面板（`ConfigPanelWindow`）与 Microsoft WebView2 浏览器的 UI 线程，提供 NativeBridge COM 宿主直连对象，支持窗口隐藏式常驻秒开，杜绝 COM 跨套间异常。
 
@@ -144,6 +144,7 @@ sequenceDiagram
     deactivate Core
 
     activate FRW
+    FRW->>FRW: 暂存当前前台窗口句柄 (GetForegroundWindow)
     FRW->>FRW: 全屏置顶并启动 DirectComposition 渲染
     FRW->>FRW: 播放开箱入场、信封掉落与金光/彩光动画
     FRW->>FRW: ResultAudioPlayer 播放抽卡音效与淡入 BGM
@@ -152,6 +153,7 @@ sequenceDiagram
     User->>FRW: 点击屏幕任意位置或按 Esc
     FRW->>FRW: 拦截点击，触发渐隐退场动画 (0.2s)
     FRW->>FRW: 停止音频，卸载鼠标钩子，隐藏窗口
+    FRW->>FRW: 恢复前台活动焦点至抽卡前窗口 (SetForegroundWindow)
     FRW->>Core: [Post] WindowClosed (CalledStudents 名单)
     deactivate FRW
 

@@ -1,7 +1,7 @@
 # ResultWindow 视图说明文档
 
 ## 概述
-`ResultWindow` 视图位于 `Main/Views/ResultWindow`，是 Blue Random 的核心招募演播结果浮窗（`DCompResultWindow`）。该窗体运行在独立的 STA 专职线程（`Frw_UI_Thread`）中，采用前沿的 **DirectComposition + Direct3D 11 + Direct2D** 纯底层硬件加速技术重构，具备全像素 Alpha 透明合成、60fps 超丝滑开箱盖章招募演出、WH_MOUSE_LL 全屏点击即关、以及专职光标自愈系统。
+`ResultWindow` 视图位于 `Main/Views/ResultWindow`，是 Blue Random 的核心招募演播结果浮窗（`DCompResultWindow`）。该窗体运行在独立的 STA 专职线程（`Frw_UI_Thread`）中，采用前沿的 **DirectComposition + Direct3D 11 + Direct2D** 纯底层硬件加速技术重构，具备全像素 Alpha 透明合成、60fps 超丝滑开箱盖章招募演出、WH_MOUSE_LL 全屏点击即关、专职光标自愈系统，以及演播结束后的前台焦点无缝还原能力。
 
 ---
 
@@ -54,7 +54,19 @@
 
 ---
 
-### 4. 离线帧导出诊断 (`DumpFrame`)
+### 4. 抽卡演播前台焦点自动还原机制 (`DisplayResults` / `FinishClose`)
+- **1. 标题**: 演播结束前台活动焦点精准归还
+- **2. 用途**: 解决教师在全屏放映 PPT 时触发抽卡，当演播窗弹出并关闭后，PPT 放映失去焦点导致翻页笔（Presentation Clicker）、键盘 PageDown/方向键失效的问题。
+- **3. 参数**:
+  - `DisplayResults`: 窗口弹出前调用 Win32 `GetForegroundWindow()` 暂存当前前台焦点窗口句柄 `_previousForegroundHwnd`。
+  - `FinishClose`: 窗口隐藏（`SW_HIDE`）后，通过 `IsWindow(_previousForegroundHwnd)` 校验并调用 `SetForegroundWindow(_previousForegroundHwnd)` 精准归还焦点。
+  - **返回值** (`void`)。
+- **4. 注意事项**:
+  - 配合悬浮按钮的 `WS_EX_NOACTIVATE` 属性，教师点击悬浮球触发抽卡时，前台焦点仍属于 PPT；演播窗弹出后演播，演播完毕关闭后立刻无感物归原主，使翻页笔在抽卡前后恒定灵敏有效。
+
+---
+
+### 5. 离线帧导出诊断 (`DumpFrame`)
 - **1. 标题**: 演播帧诊断图像转储
 - **2. 用途**: 供开发者离线诊断 Direct2D 图层绘制排版、字体渲染或色彩对齐。
 - **3. 参数**:

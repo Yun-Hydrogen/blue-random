@@ -189,6 +189,12 @@ public sealed class DCompResultWindow
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
     private static extern bool SetFocus(IntPtr hWnd);
 
     [DllImport("user32.dll")]
@@ -236,6 +242,7 @@ public sealed class DCompResultWindow
     private static WndProc? _wndProc;
     private static IntPtr _hwnd;
     private static DCompResultWindow? _instance;
+    private IntPtr _previousForegroundHwnd = IntPtr.Zero;
 
     // ========================================================================
     //  2. 图形设备
@@ -509,6 +516,9 @@ public sealed class DCompResultWindow
 
         BuildLayers();
         EnsureSurface();
+
+        // 记录抽卡演播弹出前的当前活动前台窗口（如正在全屏放映的 PPT），在演播结束关闭时精准交还
+        _previousForegroundHwnd = GetForegroundWindow();
 
         SetWindowPos(_hwnd, new IntPtr(-1),
             (int)Math.Round(_winX * _dpiScale), (int)Math.Round(_winY * _dpiScale),
@@ -1237,6 +1247,14 @@ public sealed class DCompResultWindow
         ShowWindow(_hwnd, SW_HIDE);
         _audio.StopBgmImmediate();
         ReleaseLayers();
+
+        // 演播结束关闭后，将前台活动焦点精准归还给抽卡前持有焦点的窗口（如 PPT 放映窗口），确保翻页笔翻页无缝响应
+        if (_previousForegroundHwnd != IntPtr.Zero && IsWindow(_previousForegroundHwnd))
+        {
+            SetForegroundWindow(_previousForegroundHwnd);
+            _previousForegroundHwnd = IntPtr.Zero;
+        }
+
         // 随关闭事件上报本轮名单，供"结果暂留浮窗"复用
         IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Frw, "WindowClosed", _students));
     }
