@@ -4,5 +4,9 @@
     "omnisharp.defaultLaunchSolution": "BlueRandom.sln",
     "omnisharp.enableRoslynAnalyzers": true,
     "omnisharp.enableEditorConfigSupport": true,
-    "dotnet.server.useOmnisharp": false
+    "dotnet.server.useOmnisharp": false,
+    "files.exclude": {
+        "**/Main/bin": true,
+        "**/Main/obj": true
+    }
 }

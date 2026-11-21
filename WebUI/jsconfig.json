@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "checkJs": false,
+    "allowJs": true,
+    "jsx": "preserve",
+    "paths": {
+      "@/*": ["./ConfigPanel/*"]
+    }
+  },
+  "include": [
+    "ConfigPanel/**/*",
+    "vite.config.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
+

@@ -43,12 +43,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: WebUI/package-lock.json
 
       - name: Install npm dependencies
-        run: npm ci
+        run: npm ci --prefix WebUI
 
       - name: Build WebUI (Vite)
-        run: npm run build:vite
+        run: npm --prefix WebUI run build
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
@@ -59,7 +60,7 @@ jobs:
         run: dotnet restore BlueRandom.sln
 
       - name: Run Unit Tests
-        run: dotnet test tests/BlueRandom.Tests/BlueRandom.Tests.csproj --configuration Release --verbosity normal
+        run: dotnet test Tests/BlueRandom.Tests/BlueRandom.Tests.csproj --configuration Release --verbosity normal
 
       - name: Resolve Metadata and Validate Changelog
         id: meta
@@ -85,7 +86,7 @@ jobs:
 
       - name: Publish Single-File Standalone (win-x64)
         run: >
-          dotnet publish src-csharp/BlueRandom.csproj
+          dotnet publish Main/BlueRandom.csproj
           -c Release
           -r win-x64
           --self-contained true

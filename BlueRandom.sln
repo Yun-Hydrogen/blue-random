@@ -1,15 +1,15 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src-csharp", "src-csharp", "{4096C7B0-4C23-1A46-0D1D-C9BB4F2AE7D0}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Main", "Main", "{4096C7B0-4C23-1A46-0D1D-C9BB4F2AE7D0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlueRandom", "src-csharp\BlueRandom.csproj", "{8CF413BB-6A53-4500-92F9-6F63203F3C76}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlueRandom", "Main\BlueRandom.csproj", "{8CF413BB-6A53-4500-92F9-6F63203F3C76}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlueRandom.Tests", "tests\BlueRandom.Tests\BlueRandom.Tests.csproj", "{5532BB87-1722-41C6-B276-8C07A5811824}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlueRandom.Tests", "Tests\BlueRandom.Tests\BlueRandom.Tests.csproj", "{5532BB87-1722-41C6-B276-8C07A5811824}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
