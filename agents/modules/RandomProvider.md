@@ -45,15 +45,16 @@
 
 ---
 
-### 4. 触发抽卡与全窗口协同 (`BackendScheduler.TriggerDraw`)
-- **1. 标题**: `BackendScheduler.TriggerDraw`
-- **2. 用途**: 响应悬浮按钮的点击抽取指令。从当前活跃班级或全局名单拉取池子，调用 `LotteryEngine.Pick` 生成抽取结果，并向 DirectComposition 演播窗（FRW）与结果暂留窗（LRW）分发展示。
+### 4. 触发抽卡与全窗口协同 (`BackendScheduler.TriggerDraw` / `HandleFrwWindowClosed`)
+- **1. 标题**: `BackendScheduler.TriggerDraw` 与关闭状态收敛
+- **2. 用途**: 响应悬浮按钮的点击抽取指令。从当前活跃班级或全局名单拉取池子，调用 `LotteryEngine.Pick` 生成抽取结果，并向 DirectComposition 演播窗（FRW）与结果暂留窗（LRW）分发展示；在演播窗关闭后依据用户意图决定是否弹出暂留窗。
 - **3. 参数**:
   - `count` (`int`): 请求抽取人数。
   - **返回值** (`void`)。
 - **4. 注意事项**:
   - 执行前会自动检查并向 `LRW` 发送 `HideWindow` 指令，隐藏上一轮的暂留结果。
   - 抽取完成后向 `FRW` 发送包含结果名单与演出配置的 `ShowWindow` IPC 载荷。
+  - **主动暂留收敛**: 演播窗关闭时通过 `FrwClosedPayload` 上报 `KeepResult` 标志；调度器仅在 `props.ShowLastResult == true && KeepResult == true` 时才调用 `ShowLastResultWindow` 唤起暂留卡片；用户点击其他区域或按 Esc 时一律向 LRW 发送 `HideWindow` 保持隐藏。
 
 ---
 
@@ -65,6 +66,7 @@
   - **返回值** (`bool`): 解析与同步是否成功。
 - **4. 注意事项**:
   - 采用防抖（Debounce）设计，用户在配置面板连续拖动滑块时不会触发频繁的磁盘 IO 写入。
+  - **样式同步防误弹出**: 保存配置时仅调用 `ApplyLastResultProps` 广播样式和不透明度热更新，并在关闭暂留配置时下发 `HideWindow`，**绝不调用** `ShowWindow`，彻底避免保存配置时误弹暂留窗。
 
 ---
 

@@ -97,14 +97,14 @@
                        Visibility="Collapsed"/>
 
             <!--
-              底部固定区域：自动关闭进度条 + 操作提示
+              底部固定区域：自动关闭进度条 + 点击此处关闭长条按钮
               （先于 ScrollViewer 停靠，避免被名单覆盖）
             -->
-            <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
                 <Grid x:Name="ProgressHost" Visibility="Collapsed" Margin="0,0,0,6">
-                    <Border Height="4" CornerRadius="2"
+                    <Border Height="3" CornerRadius="1.5"
                             Background="{DynamicResource ProgressTrackBrush}"/>
-                    <Border x:Name="ProgressFill" Height="4" CornerRadius="2"
+                    <Border x:Name="ProgressFill" Height="3" CornerRadius="1.5"
                             Background="{DynamicResource AccentBrush}"
                             HorizontalAlignment="Stretch"
                             RenderTransformOrigin="0,0.5">
@@ -113,9 +113,39 @@
                         </Border.RenderTransform>
                     </Border>
                 </Grid>
-                <TextBlock Text="点按 ✕ 可暂时关闭，下次抽取后自动显示"
-                           FontSize="10" Foreground="#93A9BA"
-                           HorizontalAlignment="Center" Margin="0,1,0,0"/>
+
+                <Button x:Name="BottomCloseButton"
+                        Height="28"
+                        HorizontalAlignment="Stretch"
+                        Background="{DynamicResource CloseHoverBrush}"
+                        BorderBrush="{DynamicResource AccentBrush}"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        Click="OnCloseClick">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="BtnBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="14">
+                                <TextBlock x:Name="BtnText"
+                                           Text="点击此处关闭"
+                                           FontSize="11.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="#2E86C8"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                    <Setter TargetName="BtnText" Property="Foreground" Value="White"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
             </StackPanel>
 
             <ScrollViewer x:Name="ListScroll"
@@ -124,18 +154,25 @@
                           MaxHeight="540"
                           Margin="0,0,0,6">
                 <ItemsControl x:Name="ResultList">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="0,2" Padding="8,6" CornerRadius="9"
-                                    Background="{DynamicResource RowBackgroundBrush}">
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="12" Height="12" CornerRadius="6"
-                                            Background="{Binding BadgeBrush}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Name}"
-                                               FontSize="13" Foreground="#22384C"
-                                               Margin="9,0,0,0" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
+                            <Border Width="{Binding BlockWidth}" Height="{Binding BlockHeight}"
+                                    Margin="3" CornerRadius="8"
+                                    Background="{Binding BackgroundBrush}"
+                                    BorderBrush="{Binding BorderBrush}"
+                                    BorderThickness="1.5"
+                                    Padding="8,0">
+                                <TextBlock Text="{Binding Name}"
+                                           FontSize="{Binding FontSize}" FontWeight="SemiBold"
+                                           Foreground="#16283A"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

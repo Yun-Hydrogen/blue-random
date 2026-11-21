@@ -33,6 +33,9 @@ public partial class LastResultWindow : Window
     /// <summary>自动关闭倒计时与状态控制器。</summary>
     private readonly LastResultAutoCloseController _autoClose;
 
+    private IReadOnlyList<CalledStudent>? _currentStudents;
+    private double _currentOpacity = 1.0;
+
     public LastResultWindow()
     {
         InitializeComponent();
@@ -102,6 +105,7 @@ public partial class LastResultWindow : Window
             ApplyProps(ConfigCache.GetFrwProps());
 
             var students = payload.CalledStudents ?? new List<CalledStudent>();
+            _currentStudents = students;
 
             CountText.Text = $"{students.Count} 人";
             TimeText.Text = payload.DrawnAt == default ? string.Empty : $"{payload.DrawnAt:HH:mm} 抽取";
@@ -109,7 +113,7 @@ public partial class LastResultWindow : Window
             bool hasData = students.Count > 0;
             EmptyText.Visibility = hasData ? Visibility.Collapsed : Visibility.Visible;
             ListScroll.Visibility = hasData ? Visibility.Visible : Visibility.Collapsed;
-            ResultList.ItemsSource = LastResultPresenter.BuildRows(students);
+            ResultList.ItemsSource = LastResultPresenter.BuildRows(students, _currentOpacity);
 
             PositionTopRight();
 
@@ -198,6 +202,13 @@ public partial class LastResultWindow : Window
     {
         if (props == null) return;
 
+        if (!props.ShowLastResult && IsVisible)
+        {
+            HideWindow();
+            return;
+        }
+
+        _currentOpacity = Math.Clamp(props.LastResultOpacity, 0.1, 1.0);
         var palette = LrwVisualTheme.Compute(
             props.LastResultBgColor, props.LastResultBorderColor, props.LastResultOpacity);
 
@@ -210,6 +221,11 @@ public partial class LastResultWindow : Window
         Resources["BadgeBackgroundBrush"] = LastResultPresenter.BrushOf(palette.BadgeBackground);
         Resources["CloseHoverBrush"] = LastResultPresenter.BrushOf(palette.CloseHover);
         Resources["ProgressTrackBrush"] = LastResultPresenter.BrushOf(palette.ProgressTrack);
+
+        if (_currentStudents != null && _currentStudents.Count > 0)
+        {
+            ResultList.ItemsSource = LastResultPresenter.BuildRows(_currentStudents, _currentOpacity);
+        }
 
         _autoClose.Seconds = Math.Max(0, props.LastResultAutoCloseSeconds);
         if (IsVisible) StartAutoClose(_autoClose.Seconds);

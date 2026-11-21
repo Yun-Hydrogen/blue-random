@@ -97,6 +97,15 @@ public class FrwShowPayload
 }
 
 /// <summary>
+/// 演播结果窗关闭事件载荷，指示抽取名单及用户是否主动点击暂留。
+/// </summary>
+public class FrwClosedPayload
+{
+    public List<CalledStudent> Students { get; set; } = new();
+    public bool KeepResult { get; set; }
+}
+
+/// <summary>
 /// 结果暂留浮窗展示载荷。
 /// </summary>
 public class LrwShowPayload

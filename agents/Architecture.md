@@ -106,7 +106,7 @@ flowchart TD
 | `Fcb` | `Core` | `Post` | `RandomTriggered` | `int` | 用户在悬浮球点击确认，请求抽取指定人数 (1-10) |
 | `Fcb` | `Core` | `Post` | `MoveNewPosition` | `FcbPositionPayload` | 悬浮球被拖拽后上报最新屏幕坐标 (X, Y) |
 | `Core` | `Frw` | `Post` | `ShowWindow` | `FrwShowPayload` | 指示演播窗全屏弹出并播放抽卡动画 |
-| `Frw` | `Core` | `Post` | `WindowClosed` | `List<CalledStudent>` | 演播窗关闭，上报本轮抽取名单供暂留窗使用 |
+| `Frw` | `Core` | `Post` | `WindowClosed` | `FrwClosedPayload` | 演播窗关闭，上报本轮抽取名单与用户是否主动选择暂留结果 |
 | `Core` | `Lrw` | `Post` | `ShowWindow` | `LrwShowPayload` | 指示暂留窗在屏幕右上角滑入展示抽取结果 |
 | `Core` | `Lrw` | `Post` | `HideWindow` | `null` | 启动新抽卡时指示暂留窗立即滑出隐藏 |
 | `Core` | `Fcb` | `Post` | `ApplyProps` | `FloatingButtonConfig` | 热更新悬浮球尺寸、透明度、边框与图标 |
@@ -150,24 +150,33 @@ sequenceDiagram
     FRW->>FRW: ResultAudioPlayer 播放抽卡音效与淡入 BGM
     FRW->>FRW: 到达 Ready 状态，安装全屏鼠标钩子，显示提示胶囊
 
-    User->>FRW: 点击屏幕任意位置或按 Esc
+    alt 点击底部横条「点击此处暂留结果」
+        User->>FRW: 点击底部提示横条
+        FRW->>FRW: 判定命中横条区域，设置 keepResult = true
+    else 点击其他区域或按 Esc
+        User->>FRW: 点击屏幕任意其他位置或按 Esc
+        FRW->>FRW: 判定未命中横条区域，设置 keepResult = false
+    end
+
     FRW->>FRW: 拦截点击，触发渐隐退场动画 (0.2s)
     FRW->>FRW: 停止音频，卸载鼠标钩子，隐藏窗口
     FRW->>FRW: 恢复前台活动焦点至抽卡前窗口 (SetForegroundWindow)
-    FRW->>Core: [Post] WindowClosed (CalledStudents 名单)
+    FRW->>Core: [Post] WindowClosed (FrwClosedPayload: Students, KeepResult)
     deactivate FRW
 
     activate Core
-    Core->>Core: 检查配置是否开启暂留窗 (ShowLastResult)
-    opt 开启暂留窗
+    Core->>Core: 检查配置与暂留意图 (ShowLastResult && KeepResult)
+    alt 满足暂留条件 (ShowLastResult && KeepResult)
         Core->>LRW: [Post] ShowWindow (LrwShowPayload)
         activate LRW
-        LRW->>LRW: 绑定学生行列表，自屏幕右侧滑入呈现 (0.3s)
+        LRW->>LRW: 绑定学生方块磁贴，自屏幕右侧滑入呈现 (0.3s)
         LRW->>LRW: 启动线性自动关闭进度条倒计时
         opt 倒计时结束或点击 ✕
             LRW-->>LRW: 向右滑出隐藏
         end
         deactivate LRW
+    else 不暂留或未开启暂留
+        Core->>LRW: [Post] HideWindow
     end
     deactivate Core
 ```

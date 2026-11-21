@@ -15,7 +15,7 @@
   - **返回值** (`void`)。
 - **4. 注意事项**:
   - 必须在 `App.OnStartup` 的第一行优先触发。
-  - 优先从本地磁盘 `Resources/fonts/UI.ttf` 加载；若在单文件打包模式下找不到物理文件，则无感切换到从程序集清单资源读取字节流并通过 Win32 API `AddFontMemResourceEx` 注入 GDI 内存字体句柄。
+  - 优先从本地磁盘 `Resources/fonts/UI.ttf` 加载；若处于单文件打包独立发布态（本地无物理文件），自动从程序集嵌入清单流中提取至当前用户专属数据缓存目录（`~/.blue random/cache/fonts/UI.ttf`，自带尺寸校验避免重复写盘，开销 < 1ms），并构建带确切物理 Uri 的 `FontFamily(uri, "./#NanxiXinyuanti Regualr")`，彻底解决 WPF / DirectWrite 旁路 GDI 内存字体导致结果浮窗回退为微软雅黑的缺陷。
 
 ---
 

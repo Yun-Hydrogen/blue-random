@@ -97,7 +97,7 @@ public class NativeBridge
                 "ApplyDefaultPickCount",
                 ConfigCache.Current.PickCountDialog.DefaultCount));
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyProps", ConfigCache.GetFrwProps()));
-            BackendScheduler.RefreshLastResultWindow();
+            BackendScheduler.ApplyLastResultProps();
         }
         return ok;
     }

@@ -193,7 +193,19 @@ public static class BackendScheduler
         switch (msg.Command)
         {
             case "WindowClosed":
-                HandleFrwWindowClosed(msg.Payload as List<CalledStudent>);
+                List<CalledStudent>? students = null;
+                bool keepResult = false;
+                if (msg.Payload is FrwClosedPayload frwClosed)
+                {
+                    students = frwClosed.Students;
+                    keepResult = frwClosed.KeepResult;
+                }
+                else if (msg.Payload is List<CalledStudent> list)
+                {
+                    students = list;
+                    keepResult = false;
+                }
+                HandleFrwWindowClosed(students, keepResult);
                 break;
 
             case "ErrorHappened":
@@ -205,7 +217,7 @@ public static class BackendScheduler
                     _isDrawing = false;
                 }
                 IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ShowWindow"));
-                RefreshLastResultWindow();
+                ApplyLastResultProps();
                 break;
         }
     }
@@ -213,11 +225,13 @@ public static class BackendScheduler
     /// <summary>
     /// 招募结果浮窗关闭后的状态收敛处理。
     /// 解除抽取互斥锁定、缓存最近结果，并发送 ShowWindow 唤醒悬浮球恢复桌面交互。
+    /// 仅在用户主动点击底部横条暂留且配置开启时展示暂留窗。
     /// </summary>
     /// <param name="lastStudents">结果浮窗随 WindowClosed 上报的本次抽取名单。</param>
-    private static void HandleFrwWindowClosed(List<CalledStudent>? lastStudents)
+    /// <param name="keepResult">用户是否主动选择暂留结果。</param>
+    private static void HandleFrwWindowClosed(List<CalledStudent>? lastStudents, bool keepResult)
     {
-        AppLogger.Info("Backend", "结果浮窗已关闭，恢复悬浮按钮");
+        AppLogger.Info("Backend", $"结果浮窗已关闭，恢复悬浮按钮 (KeepResult={keepResult})");
         lock (_stateLock)
         {
             _isDrawing = false;
@@ -231,43 +245,66 @@ public static class BackendScheduler
         // 恢复桌面悬浮球可见性
         IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Fcb, "ShowWindow"));
 
-        // 若开启"结果暂留浮窗"，在屏幕右上角保留本次结果
-        RefreshLastResultWindow();
+        // 仅在用户主动点击底部横条暂留且配置开启时展示暂留窗
+        var props = ConfigCache.GetFrwProps();
+        if (props.ShowLastResult && keepResult)
+        {
+            ShowLastResultWindow();
+        }
+        else
+        {
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "HideWindow"));
+        }
     }
 
     /// <summary>
-    /// 依据当前配置与最近一次抽取结果，同步结果暂留浮窗（LRW）的样式与显隐。
-    /// 抽取演出进行中或未开启开关时保持隐藏。
+    /// 主动唤起结果暂留浮窗（LRW）展示最近一次抽取结果。
     /// </summary>
-    public static void RefreshLastResultWindow()
+    public static void ShowLastResultWindow()
     {
         var props = ConfigCache.GetFrwProps();
         IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ApplyProps", props));
 
         LrwShowPayload? payload = null;
-        if (props.ShowLastResult)
+        lock (_stateLock)
         {
-            lock (_stateLock)
+            if (!_isDrawing && _lastResults.Count > 0)
             {
-                if (!_isDrawing && _lastResults.Count > 0)
+                payload = new LrwShowPayload
                 {
-                    payload = new LrwShowPayload
-                    {
-                        CalledStudents = new List<CalledStudent>(_lastResults),
-                        DrawnAt = _lastDrawAt
-                    };
-                }
+                    CalledStudents = new List<CalledStudent>(_lastResults),
+                    DrawnAt = _lastDrawAt
+                };
             }
         }
 
-        if (payload == null)
+        if (payload != null)
+        {
+            AppLogger.Info("Backend", $"显示结果暂留浮窗，共 {payload.CalledStudents.Count} 人");
+            IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ShowWindow", payload));
+        }
+    }
+
+    /// <summary>
+    /// 同步结果暂留浮窗（LRW）的样式属性；若配置禁用了暂留窗则通知其隐藏。
+    /// 绝不主动唤起或弹出已关闭的暂留窗口。
+    /// </summary>
+    public static void ApplyLastResultProps()
+    {
+        var props = ConfigCache.GetFrwProps();
+        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ApplyProps", props));
+        if (!props.ShowLastResult)
         {
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "HideWindow"));
-            return;
         }
+    }
 
-        AppLogger.Info("Backend", $"显示结果暂留浮窗，共 {payload.CalledStudents.Count} 人");
-        IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Lrw, "ShowWindow", payload));
+    /// <summary>
+    /// 兼容旧方法：仅同步属性并检查可见性，绝不强行弹出暂留窗口。
+    /// </summary>
+    public static void RefreshLastResultWindow()
+    {
+        ApplyLastResultProps();
     }
 
     // ========================================================================
@@ -357,7 +394,8 @@ public static class BackendScheduler
                 "ApplyDefaultPickCount",
                 ConfigCache.Current.PickCountDialog.DefaultCount));
             IpcBroker.Send(IpcMessage.Create(IpcAction.Get, IpcModule.Frw, "ApplyProps", ConfigCache.GetFrwProps()));
-            RefreshLastResultWindow();
+            // 仅同步 LRW 样式与显隐约束，绝不重新弹出已关闭的暂留窗口
+            ApplyLastResultProps();
             return true;
         }
         catch (Exception ex)

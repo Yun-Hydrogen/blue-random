@@ -222,6 +222,9 @@ public sealed class DCompResultWindow
     private static extern bool GetCursorPos(out POINT lpPoint);
 
     [DllImport("user32.dll")]
+    private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+
+    [DllImport("user32.dll")]
     private static extern IntPtr WindowFromPoint(POINT point);
 
     [DllImport("user32.dll")]
@@ -294,7 +297,23 @@ public sealed class DCompResultWindow
     private System.Threading.Timer? _tickTimer;
     private int _tickPending;               // WM_TIMER 在途标志（0=无在途，1=已投递未处理）
     private bool _canClose;
+    private bool _keepResultOnDismiss;
     private readonly ConcurrentQueue<Action> _uiQueue = new();
+
+    private bool IsPointInsideHint(int screenX, int screenY)
+    {
+        POINT pt = new POINT { X = screenX, Y = screenY };
+        if (!ScreenToClient(_hwnd, ref pt)) return false;
+        return IsClientPointInsideHint(pt.X, pt.Y);
+    }
+
+    private bool IsClientPointInsideHint(int clientX, int clientY)
+    {
+        double dipX = clientX / _dpiScale;
+        double dipY = clientY / _dpiScale;
+        return dipX >= _hintX && dipX <= (_hintX + _hintW) &&
+               dipY >= _hintY && dipY <= (_hintY + HintHeight);
+    }
 
     // 全屏点击检测（WH_MOUSE_LL 低级钩子，安装在专职消息泵线程，回调微秒级返回）
     private LowLevelMouseProc? _mouseHookProc;   // 防 GC 回收委托
@@ -595,14 +614,26 @@ public sealed class DCompResultWindow
 
     private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && _hookReady)
+        if (nCode >= 0 && _hookReady && _instance != null)
         {
             int msg = wParam.ToInt32();
             bool isDown = msg is WM_LBUTTONDOWN_LL or WM_RBUTTONDOWN_LL or WM_MBUTTONDOWN_LL or WM_XBUTTONDOWN_LL;
             if (isDown)
             {
+                bool clickedHint = false;
+                if (_instance._props.ShowLastResult)
+                {
+                    try
+                    {
+                        var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                        clickedHint = _instance.IsPointInsideHint(hookStruct.pt.X, hookStruct.pt.Y);
+                    }
+                    catch { }
+                }
+
                 // 就绪：吞掉点击（不透传下层），投递到渲染线程关闭浮窗
-                PostMessageW(_hwnd, WM_LBUTTONDOWN, IntPtr.Zero, IntPtr.Zero);
+                // wParam: 1 = clicked hint (keep result), 0 = other area
+                PostMessageW(_hwnd, WM_LBUTTONDOWN, (IntPtr)(clickedHint ? 1 : 0), IntPtr.Zero);
                 return new IntPtr(1);
             }
         }
@@ -611,13 +642,27 @@ public sealed class DCompResultWindow
 
     /// <summary>
     /// 统一刷新光标状态。SetCursor 只接受真实 HCURSOR：
-    /// 直接把 IDC_ARROW / IDC_HAND 资源 ID 传给 SetCursor 会返回 NULL 并静默失败，
-    /// 导致窗口继承的 IDC_WAIT（系统启动等待光标）始终无法被纠正。
+    /// 当启用暂留结果时，悬停在底部横条为手型光标，其余区域为普通箭头；
+    /// 未启用暂留结果时，就绪后整窗手型光标。
     /// </summary>
     private static void RefreshCursor()
     {
-        var cursor = (_instance != null && _instance.IsReadyToClose()) ? HandCursor : ArrowCursor;
-        if (cursor != IntPtr.Zero) SetCursor(cursor);
+        if (_instance == null || !_instance.IsReadyToClose())
+        {
+            if (ArrowCursor != IntPtr.Zero) SetCursor(ArrowCursor);
+            return;
+        }
+
+        if (_instance._props.ShowLastResult && GetCursorPos(out POINT pt))
+        {
+            bool isOverHint = _instance.IsPointInsideHint(pt.X, pt.Y);
+            var cursor = isOverHint ? HandCursor : ArrowCursor;
+            if (cursor != IntPtr.Zero) SetCursor(cursor);
+            return;
+        }
+
+        var defaultCursor = _instance._props.ShowLastResult ? ArrowCursor : HandCursor;
+        if (defaultCursor != IntPtr.Zero) SetCursor(defaultCursor);
     }
 
     /// <summary>
@@ -736,8 +781,10 @@ public sealed class DCompResultWindow
             _cardCenters.Add((cx, cy));
         }
 
-        // 4. 固定关闭提示：始终显示同一条提示，不再展示忙碌状态
-        _hintLayer = CreateLayer(RenderHintBitmap("点击任意处关闭", _hintW), _hintW, HintHeight);
+        // 4. 固定关闭提示：根据是否开启暂留结果显示不同文案与按钮颜色（暂留按钮为粉色）
+        bool isKeep = _props.ShowLastResult;
+        string hintText = isKeep ? "点击此处暂留结果" : "点击任意处关闭";
+        _hintLayer = CreateLayer(RenderHintBitmap(hintText, _hintW, isKeep), _hintW, HintHeight);
 
         ApplyInitialState();
     }
@@ -1153,14 +1200,18 @@ public sealed class DCompResultWindow
         });
     }
 
-    private BitmapSource RenderHintBitmap(string text, double width)
+    private BitmapSource RenderHintBitmap(string text, double width, bool isPink = false)
     {
         int w = (int)Math.Round(width);
         int h = (int)HintHeight;
         return RenderBitmap(w, h, dc =>
         {
+            var brush = isPink
+                ? new SolidColorBrush(Color.FromRgb(0xFF, 0x66, 0x99))
+                : new SolidColorBrush(Color.FromRgb(0x66, 0xCC, 0xFF));
+
             dc.DrawRoundedRectangle(
-                new SolidColorBrush(Color.FromRgb(0x66, 0xCC, 0xFF)), null,
+                brush, null,
                 new Rect(0, 0, w, h), 16, 16);
 
             var face = new Typeface(ResourceCache.CustomFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
@@ -1214,10 +1265,11 @@ public sealed class DCompResultWindow
     //  12. 关闭
     // ========================================================================
 
-    /// <summary>开始关闭动画（仅底部胶囊或 Esc 触发）。</summary>
-    public void Dismiss()
+    /// <summary>开始关闭动画（可由底部胶囊、任意区域点击或 Esc 触发）。</summary>
+    public void Dismiss(bool keepResult = false)
     {
         if (_phase == Phase.Closing || _phase == Phase.Idle) return;
+        _keepResultOnDismiss = keepResult;
         _phase = Phase.Closing;
         _canClose = false;
         _hookReady = false;     // 关闭动画期间停止吞点击
@@ -1255,8 +1307,12 @@ public sealed class DCompResultWindow
             _previousForegroundHwnd = IntPtr.Zero;
         }
 
-        // 随关闭事件上报本轮名单，供"结果暂留浮窗"复用
-        IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Frw, "WindowClosed", _students));
+        // 随关闭事件上报本轮名单与是否暂留，供"结果暂留浮窗"复用
+        IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Frw, "WindowClosed", new FrwClosedPayload
+        {
+            Students = _students,
+            KeepResult = _keepResultOnDismiss
+        }));
     }
 
     // ========================================================================
@@ -1298,11 +1354,25 @@ public sealed class DCompResultWindow
 
             case WM_LBUTTONDOWN:
                 // 窗口内点击（含低级钩子投递的全屏点击）→ 就绪后关闭
-                _instance?.OnMouseDown(GetX(lParam), GetY(lParam));
+                bool keep = false;
+                if (wParam.ToInt32() == 1)
+                {
+                    keep = true;
+                }
+                else if (_instance != null && _instance._props.ShowLastResult)
+                {
+                    int cx = GetX(lParam);
+                    int cy = GetY(lParam);
+                    if (cx != 0 || cy != 0)
+                    {
+                        keep = _instance.IsClientPointInsideHint(cx, cy);
+                    }
+                }
+                _instance?.OnMouseDown(keep);
                 return IntPtr.Zero;
 
             case WM_KEYDOWN:
-                if (wParam.ToInt32() == VK_ESCAPE) _instance?.Dismiss();
+                if (wParam.ToInt32() == VK_ESCAPE) _instance?.Dismiss(keepResult: false);
                 return IntPtr.Zero;
 
             case WM_ERASEBKGND:
@@ -1312,7 +1382,7 @@ public sealed class DCompResultWindow
                 return IntPtr.Zero;
 
             case WM_CLOSE:
-                _instance?.Dismiss();
+                _instance?.Dismiss(keepResult: false);
                 return IntPtr.Zero;
 
             case WM_DESTROY:
@@ -1331,10 +1401,10 @@ public sealed class DCompResultWindow
     /// <summary>是否已就绪（就绪后窗口任意区域点击均可关闭）。</summary>
     private bool IsReadyToClose() => _canClose && _phase == Phase.Ready;
 
-    /// <summary>就绪后点击任意位置关闭（含低级钩子投递的全屏点击；盖示动画未完成时无效）。</summary>
-    private void OnMouseDown(int x, int y)
+    /// <summary>就绪后点击关闭（点击底部横条暂留，点击其他位置直接关闭；盖示动画未完成时无效）。</summary>
+    private void OnMouseDown(bool keepResult)
     {
         if (!IsReadyToClose()) return;
-        Dismiss();
+        Dismiss(keepResult);
     }
 }

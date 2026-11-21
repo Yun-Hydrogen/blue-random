@@ -30,6 +30,7 @@
   - 核心载荷类：
     - `FcbPositionPayload`: 携带悬浮按钮移动后的 `PositionX` 与 `PositionY`。
     - `FrwShowPayload`: 携带演播窗抽卡结果名单与演出配置。
+    - `FrwClosedPayload`: 携带演播窗关闭时的学生名单 `Students` 与用户是否在底部横条主动点击暂留的标识 `KeepResult`。
     - `LrwShowPayload`: 携带暂留窗上一轮抽取学生列表与抽取完成时间 `DrawnAt`。
 - **4. 注意事项**:
   - 模块间传输复杂数据优先使用上述强类型载荷，禁止传递包含原生 Win32 句柄或未冻结的 WPF 控件对象。

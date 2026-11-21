@@ -46,4 +46,48 @@ public class EmbeddedResourceTests
     {
         Assert.NotNull(ResourceCache.GetWebUiAsset("index.html"));
     }
+
+    /// <summary>
+    /// 验证自定义字体在单文件发布态下可自嵌入清单提取并解析为南西新圆体，绝不回退至系统微软雅黑。
+    /// </summary>
+    [Fact]
+    public void CustomFont_ResolvesToNanxiFontFamily_InPublishEnvironment()
+    {
+        string emptySandbox = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "BR_FontSandbox_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(emptySandbox);
+        try
+        {
+            // 重置静态字段为 null 并使用无物理文件的沙箱路径模拟单文件发布态
+            var field = typeof(ResourceCache).GetField("_customFont", BindingFlags.Static | BindingFlags.NonPublic);
+            field?.SetValue(null, null);
+
+            ResourceCache.EnsureFont(emptySandbox);
+            var font = ResourceCache.CustomFont;
+            Assert.NotNull(font);
+
+            var face = new System.Windows.Media.Typeface(font, System.Windows.FontStyles.Normal, System.Windows.FontWeights.Bold, System.Windows.FontStretches.Normal);
+            bool ok = face.TryGetGlyphTypeface(out var gt);
+            Assert.True(ok, "CustomFont 必须能成功解析为 GlyphTypeface");
+            Assert.NotNull(gt);
+
+            string allFamilyNames = string.Join(", ", gt.FamilyNames.Values);
+            Assert.True(allFamilyNames.Contains("南西新圆体") || allFamilyNames.Contains("NanxiXinyuanti"),
+                $"解析字形必须为南西新圆体，实际为: {allFamilyNames}");
+            Assert.DoesNotContain("Microsoft YaHei", allFamilyNames);
+
+            // 验证中文字符字形映射
+            string testName = "砂狼白子早濑优香阿罗娜";
+            foreach (char c in testName)
+            {
+                Assert.True(gt.CharacterToGlyphMap.ContainsKey(c), $"南西新圆体必须包含中文字符: '{c}'");
+            }
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(emptySandbox))
+            {
+                try { System.IO.Directory.Delete(emptySandbox, true); } catch { }
+            }
+        }
+    }
 }

@@ -35,12 +35,29 @@ public static class ResourceCache
     private static readonly ConcurrentDictionary<string, byte[]> _audioBytes = new();
     private static readonly ConcurrentDictionary<string, byte[]> _webUiAssets = new(StringComparer.OrdinalIgnoreCase);
     private static FontFamily? _customFont;
+    private static readonly object _fontLock = new();
 
     /// <summary>
     /// 全局 UI 字体（南西新圆体）。
-    /// 若未完成自定义加载，则安全回退至系统字体备选链。
+    /// 若未完成自定义加载，则自动执行 EnsureFont 提取并绑定。
     /// </summary>
-    public static FontFamily CustomFont => _customFont ?? new FontFamily("NanxiXinyuanti Regualr, 南西新圆体, Microsoft YaHei UI, Segoe UI");
+    public static FontFamily CustomFont
+    {
+        get
+        {
+            if (_customFont == null)
+            {
+                lock (_fontLock)
+                {
+                    if (_customFont == null)
+                    {
+                        EnsureFont(AppDomain.CurrentDomain.BaseDirectory);
+                    }
+                }
+            }
+            return _customFont ?? new FontFamily("NanxiXinyuanti Regualr, 南西新圆体, Microsoft YaHei UI, Segoe UI");
+        }
+    }
 
     /// <summary>
     /// 阶段 -1 极速硬加载：
@@ -56,69 +73,93 @@ public static class ResourceCache
     }
 
     /// <summary>
-    /// 确保应用全局 UI.ttf（南西新圆体）已正确注入至当前进程字体表。
+    /// 确保应用全局 UI.ttf（南西新圆体）已正确注入至当前进程字体表并构建 WPF 专用 FontFamily。
     /// <para>
     /// 加载策略：
-    /// 1. 优先探测本地发布目录或开发源码目录下的 public/fonts/UI.ttf；
-    ///    若存在，调用 Win32 GDI API <c>AddFontResourceEx(..., FR_PRIVATE, ...)</c> 将其私有映射至进程，避免污染宿主系统字体库；
-    /// 2. 若处于单文件打包环境或文件不存在，直接从 Assembly Manifest 嵌入资源流中读取字体二进制字节，
-    ///    调用 <c>AddFontMemResourceEx</c> 注入系统 GDI 内存字体句柄，全程无需向磁盘释放任何临时 .ttf 文件。
+    /// 1. 优先探测本地发布目录或开发源码目录下的 Resources/fonts/UI.ttf；
+    ///    若存在，调用 Win32 GDI API <c>AddFontResourceEx(..., FR_PRIVATE, ...)</c> 将其私有映射至进程，并绑定确定文件 Uri；
+    /// 2. 若处于单文件打包环境（本地磁盘无物理文件），从程序集嵌入资源中提取流至当前应用专属缓存目录
+    ///    (~/.blue random/cache/fonts/UI.ttf)，带尺寸校验秒开复用，确保 WPF/DirectWrite 拥有确切文件路径，100% 正确呈现南西新圆体。
     /// </para>
     /// </summary>
     /// <param name="baseDir">基准路径。</param>
     public static void EnsureFont(string baseDir)
     {
         if (_customFont != null) return;
-
-        string fontPath = Path.Combine(baseDir, "Resources", "fonts", "UI.ttf");
-        if (!File.Exists(fontPath))
+        lock (_fontLock)
         {
-            string devFont = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "Resources", "fonts", "UI.ttf"));
-            if (File.Exists(devFont)) fontPath = devFont;
-        }
+            if (_customFont != null) return;
 
-        if (File.Exists(fontPath))
-        {
+            string fontPath = Path.Combine(baseDir, "Resources", "fonts", "UI.ttf");
+            if (!File.Exists(fontPath))
+            {
+                string devFont = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "Resources", "fonts", "UI.ttf"));
+                if (File.Exists(devFont)) fontPath = devFont;
+            }
+
+            if (File.Exists(fontPath))
+            {
+                try
+                {
+                    // 本地磁盘存在：将 TTF 私有注册到当前进程字体表
+                    AddFontResourceEx(fontPath, FR_PRIVATE, IntPtr.Zero);
+                    var uri = new Uri(Path.GetFullPath(fontPath));
+                    var families = Fonts.GetFontFamilies(uri);
+                    var family = families.FirstOrDefault();
+                    _customFont = family ?? new FontFamily(uri, "./#NanxiXinyuanti Regualr");
+                    AppLogger.Info("ResourceCache", $"已硬加载内置字体: {fontPath} ({_customFont.Source})");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Warn("ResourceCache", $"字体加载失败，使用系统后备字体: {ex.Message}");
+                }
+            }
+
+            // 单文件打包模式：自动将嵌入流解压至应用专有缓存目录，赋予 DirectWrite 确切文件物理路径
             try
             {
-                // 本地磁盘存在：将 TTF 私有注册到当前进程字体表
-                AddFontResourceEx(fontPath, FR_PRIVATE, IntPtr.Zero);
-                var uri = new Uri(Path.GetFullPath(fontPath));
-                var families = Fonts.GetFontFamilies(uri);
-                var family = families.FirstOrDefault();
-                _customFont = family ?? new FontFamily(uri, "./#NanxiXinyuanti Regualr, NanxiXinyuanti Regualr, 南西新圆体, Microsoft YaHei UI, Segoe UI");
-                AppLogger.Info("ResourceCache", $"已硬加载内置字体: {fontPath} ({_customFont.Source})");
-                return;
+                var asm = typeof(ResourceCache).Assembly;
+                using var s = asm.GetManifestResourceStream("Resources.fonts.UI.ttf")
+                              ?? asm.GetManifestResourceStream("Resources.fonts\\UI.ttf");
+                if (s != null)
+                {
+                    string cacheDir = Path.Combine(YamlConfigService.GetUserDataDir(), "cache", "fonts");
+                    Directory.CreateDirectory(cacheDir);
+                    string cachePath = Path.Combine(cacheDir, "UI.ttf");
+
+                    bool needWrite = true;
+                    if (File.Exists(cachePath))
+                    {
+                        try
+                        {
+                            if (new FileInfo(cachePath).Length == s.Length)
+                            {
+                                needWrite = false;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (needWrite)
+                    {
+                        using var fs = new FileStream(cachePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                        s.CopyTo(fs);
+                    }
+
+                    AddFontResourceEx(cachePath, FR_PRIVATE, IntPtr.Zero);
+                    var uri = new Uri(Path.GetFullPath(cachePath));
+                    var families = Fonts.GetFontFamilies(uri);
+                    var family = families.FirstOrDefault();
+                    _customFont = family ?? new FontFamily(uri, "./#NanxiXinyuanti Regualr");
+                    AppLogger.Info("ResourceCache", $"已自嵌入资源提取并装载内置 UI.ttf 字体: {cachePath}");
+                    return;
+                }
             }
             catch (Exception ex)
             {
-                AppLogger.Warn("ResourceCache", $"字体加载失败，使用系统后备字体: {ex.Message}");
+                AppLogger.Warn("ResourceCache", $"自嵌入资源提取装载字体异常: {ex.Message}");
             }
-        }
-
-        // 单文件/嵌入资源模式：全内存硬加载字体，无需释放临时文件到磁盘
-        try
-        {
-            var asm = typeof(ResourceCache).Assembly;
-            using var s = asm.GetManifestResourceStream("Resources.fonts.UI.ttf")
-                          ?? asm.GetManifestResourceStream("Resources.fonts\\UI.ttf");
-            if (s != null)
-            {
-                using var ms = new MemoryStream();
-                s.CopyTo(ms);
-                byte[] fontBytes = ms.ToArray();
-                IntPtr pFont = Marshal.AllocCoTaskMem(fontBytes.Length);
-                Marshal.Copy(fontBytes, 0, pFont, fontBytes.Length);
-                uint dummy = 0;
-                AddFontMemResourceEx(pFont, (uint)fontBytes.Length, IntPtr.Zero, ref dummy);
-                Marshal.FreeCoTaskMem(pFont);
-                _customFont = new FontFamily("NanxiXinyuanti Regualr, 南西新圆体, Microsoft YaHei UI, Segoe UI");
-                AppLogger.Info("ResourceCache", "已直接从内存硬加载内置 UI.ttf 字体 (零磁盘释放)");
-            }
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Warn("ResourceCache", $"内存硬加载字体提示: {ex.Message}");
         }
     }
 
