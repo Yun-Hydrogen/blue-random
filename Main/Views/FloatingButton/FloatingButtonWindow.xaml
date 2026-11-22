@@ -183,7 +183,8 @@
                 MouseUp="OnMainButtonMouseUp"
                 TouchDown="OnMainButtonTouchDown"
                 TouchMove="OnMainButtonTouchMove"
-                TouchUp="OnMainButtonTouchUp">
+                TouchUp="OnMainButtonTouchUp"
+                LostTouchCapture="OnMainButtonLostTouchCapture">
             <Border.Effect>
                 <DropShadowEffect Color="#0066CC" BlurRadius="12" Direction="270" ShadowDepth="3" Opacity="0.16" RenderingBias="Performance"/>
             </Border.Effect>

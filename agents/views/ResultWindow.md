@@ -20,14 +20,14 @@
 - **1. 标题**: 招募结果演播全流程状态机
 - **2. 用途**: 接收抽卡名单与视觉配置，全屏居中弹出演播窗，经历完整四阶段：
   - `Idle`: 待机静默态。
-  - `Opening`: 进场动画态。白光信封伴随音效自上方滑入，展开信封底板，学生品阶信封根据人数自适应网格排版飞入。
-  - `Ready`: 盖章就绪态。播放印章落地特效，显示学生姓名与等级标识。根据配置动态显示底部横条：若启用暂留则显示粉色“点击此处暂留结果”胶囊按钮（`#FF6699`），未启用则显示天蓝色“点击任意处关闭”胶囊按钮（`#66CCFF`），窗口进入可交互关闭状态。
-  - `Closing`: 退场态。整窗快速缩小渐隐，触发音量淡出并恢复桌面原貌。
+  - `Opening`: 进场动画态。面板缩放淡入，学生品阶信封根据人数自适应网格排版（1–5 列、最多 2 行）交错飞入，随后姓名卡逐张弹出。
+  - `Ready`: 就绪态。根据配置动态显示底部横条：若启用暂留则显示粉色“点击此处暂留结果”胶囊按钮（`#FF6699`），未启用则显示天蓝色“点击任意处关闭”胶囊按钮（`#66CCFF`），窗口进入可交互关闭状态。
+  - `Closing`: 退场态。整窗快速缩小渐隐（0.2s），触发音量淡出并恢复桌面原貌。
 - **3. 参数**:
   - `students` (`List<CalledStudent>`): 抽取命中的学生实体列表。
-  - `props` (`PickResultDialogConfig`): 本次展示的视觉与音效参数配置。
+  - `props` (`PickResultDialogConfig`): 本次展示的视觉与音效参数配置（IPC `ShowWindow` 触发时从 `ConfigCache.GetFrwProps()` 读取最新配置）。
 - **4. 注意事项**:
-  - 每次展示前会自动调用 `ReleaseSurface()` 与 `ReleaseLayers()` 强制清理上一轮结果的显存纹理，杜绝结果残影。
+  - 每次展示前会自动调用 `ReleaseLayers()` 与 `ReleaseSurface()` 强制清理上一轮结果的显存纹理，杜绝结果残影。
   - 动画计算基于高精度时钟 `Stopwatch`，不受系统卡顿或单帧耗时波动影响，永远保持物理时间恒定。
 
 ---
@@ -36,12 +36,12 @@
 - **1. 标题**: 独立专职线程 WH_MOUSE_LL 低级鼠标全局钩子与主动暂留判定
 - **2. 用途**: 就绪后，全屏捕获鼠标点击事件与 Esc 键。若开启了暂留配置，点击底部横条触发主动暂留并关闭演播窗；点击屏幕其他区域或按 Esc 键则直接关闭演播窗且不暂留结果。
 - **3. 参数**:
-  - 安装 Win32 全局低级鼠标钩子 `SetWindowsHookExW(WH_MOUSE_LL, ...)`。
-  - **返回值** (`IntPtr`): 钩子返回代码（当窗口已就绪时拦截点击并向主线程投递关闭消息；未就绪时原样传递给系统）。
+  - 在专职 STA 线程 `Frw_MouseHook` 上安装 Win32 全局低级鼠标钩子 `SetWindowsHookExW(WH_MOUSE_LL, ...)`。
+  - **返回值** (`IntPtr`): 钩子返回代码（当窗口已就绪时拦截点击并向渲染线程投递 `WM_LBUTTONDOWN`；未就绪时原样传递给系统）。
 - **4. 注意事项**:
-  - **独立专职线程设计**: Windows 对 `WH_MOUSE_LL` 钩子有极严格的超时限制（若回调耗时超过数毫秒，系统会直接静默注销钩子导致全屏点击失效）。Blue Random 为鼠标钩子单独分配了纯粹的消息泵循环，回调内仅做原子状态比对与 `PostMessage`，耗时小于 10 微秒，稳定性 100%。
-  - **DIP 命中判定**: 钩子线程拦截点击后，将屏幕物理坐标通过 `ScreenToClient` 换算至窗口客户区并除以 DPI 缩放比，精确比对底部横条矩形 `(_hintX, _hintY, _hintW, HintHeight)`；若命中则下发 `keepResult = true`，否则为 `false`。
-  - 关闭完成后通过 `FrwClosedPayload` 向 Core 投递 `WindowClosed` 消息携带名单与暂留请求。
+  - **独立专职线程设计**: Windows 对 `WH_MOUSE_LL` 钩子有极严格的超时限制（若回调耗时超过数毫秒，系统会直接静默注销钩子导致全屏点击失效）。Blue Random 为鼠标钩子单独分配了纯粹的消息泵循环，回调内仅做原子状态比对与 `PostMessageW`，耗时小于 10 微秒，稳定性 100%。
+  - **DIP 命中判定**: 钩子线程拦截点击后，通过 `IsPointInsideHint` 将屏幕物理坐标经 `ScreenToClient` 换算至窗口客户区并除以 `_dpiScale`，精确比对底部横条矩形 `(_hintX, _hintY, _hintW, HintHeight)`；若命中则下发 `keepResult = true`，否则为 `false`。
+  - 关闭完成后通过 `[Post] @Frw.WindowClosed`（`FrwClosedPayload`）向 `BackendScheduler` 上报名单与暂留请求。
 
 ---
 

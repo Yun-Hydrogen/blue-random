@@ -227,18 +227,73 @@
           :color="tabTheme"
         />
       </div>
-      <!-- 无论是否有更新，均提供 GitHub Releases 跳转入口 -->
-      <rizui_button 
-        primary
-        v-if="updateReleaseUrl"
-        text="跳转至GitHub"
-        r-icon="fa-solid fa-cloud-arrow-up"
-        long
-        @click="openURL('https://github.com/Yun-Hydrogen/blue-random/releases/latest')"
-        :color="tabTheme"
-        style="margin-top: 10px;"
-      />
+      <!-- 有新版本时提供自动下载更新；无论是否有更新均提供 GitHub Releases 跳转入口 -->
+      <div v-if="updateReleaseUrl || (updateStatus === 'update' && updateDownloadUrl)" class="update-actions-row">
+        <rizui_button
+          v-if="updateStatus === 'update' && updateDownloadUrl"
+          primary
+          text="下载并自动更新"
+          l-icon="fa-solid fa-download"
+          :color="tabTheme"
+          style="flex: 1;"
+          @click="startUpdateDownload"
+        />
+        <rizui_button
+          v-if="updateReleaseUrl"
+          :primary="!(updateStatus === 'update' && updateDownloadUrl)"
+          text="跳转至GitHub"
+          r-icon="fa-solid fa-cloud-arrow-up"
+          :color="tabTheme"
+          :style="updateStatus === 'update' && updateDownloadUrl ? '' : 'width: 100%;'"
+          @click="openURL(updateReleaseUrl)"
+        />
+      </div>
     </rizui_card>
+
+    <!-- 下载并自动更新进度 Dialog -->
+    <rizui_dialog
+      v-model:show="updateDialog.show"
+      title="下载并自动更新"
+      icon="fa-solid fa-cloud-arrow-down"
+      :color="tabTheme"
+      teleport=".config-left"
+      width="420px"
+      :mask-close="false"
+      :closable="updateDialog.state !== 'downloading' && updateDialog.state !== 'applying'"
+    >
+      <div class="update-dialog-body">
+        <div class="update-dialog-meta">
+          <span>目标版本：<strong>{{ updateRemoteTag || '最新版本' }}</strong></span>
+          <span>{{ updateAssetName || 'BlueRandom.exe' }}</span>
+        </div>
+        <div class="update-dialog-status" :class="{ error: updateDialog.state === 'error' }">
+          {{ updateDialog.message }}
+        </div>
+        <rizui_progress
+          :model-value="updateDialog.percent"
+          :indeterminate="updateDialog.indeterminate"
+          :status="updateProgressStatus"
+          :color="tabTheme"
+          :height="12"
+          show-text
+        />
+        <div v-if="updateProgressText" class="update-dialog-stats">
+          {{ updateProgressText }}
+        </div>
+      </div>
+      <template #footer>
+        <template v-if="updateDialog.state === 'downloading'">
+          <rizui_button text="取消下载" danger @click="cancelUpdateDownload" />
+        </template>
+        <template v-else-if="updateDialog.state === 'applying'">
+          <rizui_button text="正在应用更新..." primary :color="tabTheme" disabled />
+        </template>
+        <template v-else>
+          <rizui_button text="关闭" @click="updateDialog.show = false" />
+          <rizui_button text="重试下载" primary :color="tabTheme" @click="startUpdateDownload" />
+        </template>
+      </template>
+    </rizui_dialog>
 
     <!-- 重置确认 Dialog -->
     <rizui_dialog v-model:show="showResetDialog" title="确认重置" :color="tabTheme" teleport=".config-left">
@@ -279,8 +334,8 @@
 //  ref      — 创建响应式变量（值变化时自动更新界面）
 //  onMounted — 组件挂载完成后的生命周期钩子
 // ============================================================
-import { ref, reactive, computed, onMounted } from 'vue'
-import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, rizui_mdeditor, openURL } from 'riz-ui'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { rizui_card, rizui_cfgrow, rizui_switch, rizui_dialog, rizui_dropdown, rizui_text, rizui_button, rizui_infobox, rizui_mdeditor, rizui_progress, openURL } from 'riz-ui'
 
 /* 将 rizui_mdeditor 别名为 RizuiMd 以支持简约 Markdown 组件使用 */
 const RizuiMd = rizui_mdeditor
@@ -325,6 +380,18 @@ const props = defineProps({
 
   /* updateReleaseUrl — GitHub Releases 页面链接（无论是否有更新均可跳转） */
   updateReleaseUrl: String,
+
+  /* updateDownloadUrl — Release 可执行文件直链下载地址 */
+  updateDownloadUrl: String,
+
+  /* updateAssetName — Release 可执行文件名称 */
+  updateAssetName: String,
+
+  /* updateAssetSize — Release 可执行文件字节大小 */
+  updateAssetSize: Number,
+
+  /* updateRemoteTag — 远端 Release Tag */
+  updateRemoteTag: String,
 
   /* securityEnabled — 是否已开启密码保护（安全管理） */
   securityEnabled: Boolean
@@ -582,6 +649,101 @@ async function confirmSecurity() {
     securityDialog.busy = false
   }
 }
+
+// ============================================================
+//  自动下载并替换更新 Dialog
+// ============================================================
+const updateDialog = reactive({
+  show: false,
+  state: 'idle', // idle | downloading | verifying | applying | cancelled | error
+  percent: 0,
+  indeterminate: false,
+  bytesReceived: 0,
+  totalBytes: -1,
+  speedBytesPerSec: 0,
+  message: ''
+})
+
+const updateProgressStatus = computed(() => {
+  if (updateDialog.state === 'error') return 'error'
+  if (updateDialog.state === 'applying' || updateDialog.percent >= 100) return 'success'
+  return ''
+})
+
+function formatBytes(bytes) {
+  const n = Number(bytes) || 0
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`
+}
+
+const updateProgressText = computed(() => {
+  if (updateDialog.bytesReceived <= 0 && updateDialog.totalBytes <= 0) return ''
+  const received = formatBytes(updateDialog.bytesReceived)
+  const total = updateDialog.totalBytes > 0 ? ` / ${formatBytes(updateDialog.totalBytes)}` : ''
+  const speed = updateDialog.state === 'downloading' && updateDialog.speedBytesPerSec > 0
+    ? ` · ${formatBytes(updateDialog.speedBytesPerSec)}/s`
+    : ''
+  return `${received}${total}${speed}`
+})
+
+function handleUpdateProgress(p) {
+  if (!p || typeof p !== 'object') return
+  if (p.state) updateDialog.state = p.state
+  if (typeof p.bytesReceived === 'number') updateDialog.bytesReceived = p.bytesReceived
+  if (typeof p.totalBytes === 'number') updateDialog.totalBytes = p.totalBytes
+  if (typeof p.speedBytesPerSec === 'number') updateDialog.speedBytesPerSec = p.speedBytesPerSec
+  if (typeof p.percent === 'number') updateDialog.percent = p.percent
+  if (p.message) updateDialog.message = p.message
+  updateDialog.indeterminate = updateDialog.state === 'downloading' && updateDialog.totalBytes <= 0
+}
+
+onMounted(() => {
+  window.__onUpdateDownloadProgress = handleUpdateProgress
+})
+
+onBeforeUnmount(() => {
+  if (window.__onUpdateDownloadProgress === handleUpdateProgress) {
+    delete window.__onUpdateDownloadProgress
+  }
+})
+
+async function startUpdateDownload() {
+  if (!props.updateDownloadUrl) return
+  updateDialog.show = true
+  updateDialog.state = 'downloading'
+  updateDialog.percent = 0
+  updateDialog.indeterminate = true
+  updateDialog.bytesReceived = 0
+  updateDialog.totalBytes = props.updateAssetSize > 0 ? props.updateAssetSize : -1
+  updateDialog.speedBytesPerSec = 0
+  updateDialog.message = '正在连接下载服务器...'
+
+  const res = await window.configPanelApi?.downloadUpdate?.(props.updateDownloadUrl, props.updateAssetSize || 0)
+  if (!res?.ok) {
+    updateDialog.indeterminate = false
+    updateDialog.state = res?.cancelled ? 'cancelled' : 'error'
+    updateDialog.message = res?.message || (res?.cancelled ? '已取消下载' : '下载更新失败')
+    return
+  }
+
+  updateDialog.state = 'applying'
+  updateDialog.indeterminate = false
+  updateDialog.percent = 100
+  updateDialog.message = '下载完成，正在替换程序并重启...'
+
+  await new Promise(resolve => setTimeout(resolve, 350))
+  const applyRes = await window.configPanelApi?.applyDownloadedUpdate?.(res.stagedPath)
+  if (!applyRes?.ok) {
+    updateDialog.state = 'error'
+    updateDialog.message = applyRes?.message || '自动替换更新失败，请手动前往 GitHub 下载。'
+  }
+}
+
+async function cancelUpdateDownload() {
+  updateDialog.message = '正在取消下载...'
+  await window.configPanelApi?.cancelUpdateDownload?.()
+}
 </script>
 
 <style scoped>
@@ -749,6 +911,38 @@ async function confirmSecurity() {
   color: #d44;
   font-size: 12px;
   margin: 8px 0 0;
+}
+
+/* ===== 更新操作与下载进度 Dialog ===== */
+.update-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+}
+.update-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.update-dialog-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #667;
+}
+.update-dialog-status {
+  font-size: 12px;
+  color: #445;
+}
+.update-dialog-status.error {
+  color: #d44;
+}
+.update-dialog-stats {
+  font-size: 11px;
+  color: #889;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 </style>

@@ -105,6 +105,24 @@ internal sealed class ConfigPanelBrowserHost
     }
 
     /// <summary>
+    /// 向前端页面推送更新包下载进度 JSON。
+    /// </summary>
+    public async Task PushUpdateProgressAsync(string progressJson)
+    {
+        if (!_isReady) return;
+
+        string script = $"if (window.__onUpdateDownloadProgress) window.__onUpdateDownloadProgress({progressJson});";
+        try
+        {
+            await _webView.ExecuteScriptAsync(script);
+        }
+        catch
+        {
+            // 忽略前端尚未加载完时的异常
+        }
+    }
+
+    /// <summary>
     /// 异步执行 CoreWebView2 内核初始化、环境配置、桥接对象注入及资源拦截器注册。
     /// </summary>
     /// <returns>异步任务 Task。</returns>

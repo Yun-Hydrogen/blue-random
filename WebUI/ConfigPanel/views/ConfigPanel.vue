@@ -230,6 +230,10 @@
           :updateTitle="updateTitle"
           :updateDetail="updateDetail"
           :updateReleaseUrl="updateReleaseUrl"
+          :updateDownloadUrl="updateDownloadUrl"
+          :updateAssetName="updateAssetName"
+          :updateAssetSize="updateAssetSize"
+          :updateRemoteTag="updateRemoteTag"
           @update:admin="draft.admin = $event"
           @open-config-file="openConfigFile"
           @open-config-dir="openConfigDir"
@@ -377,7 +381,8 @@ const {
   createStartupTask, resetConfig, showInExplorer,
 
   /* 更新检查 */
-  updateLoading, updateStatus, updateTitle, updateDetail, updateReleaseUrl, checkUpdate,
+  updateLoading, updateStatus, updateTitle, updateDetail, updateReleaseUrl,
+  updateDownloadUrl, updateAssetName, updateAssetSize, updateRemoteTag, checkUpdate,
 
   /* 关闭与动画 */
   isClosing, closeWithAnimation, handleCancel, handleApply, saveVersion,

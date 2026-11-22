@@ -600,12 +600,30 @@ export function setupNativeBridgeAdapter() {
         })
         if (resp.ok) {
           const data = await resp.json()
+          const assets = Array.isArray(data.assets) ? data.assets : []
+          const changelogAsset = assets.find(a => String(a.name || '').toLowerCase() === 'changelog.md')
+          const exeAsset = assets.find(a => String(a.name || '').toLowerCase() === 'bluerandom.exe')
+            || assets.find(a => String(a.name || '').toLowerCase().endsWith('.exe'))
+          let detail = data.body || '已获取最新发布信息'
+          if (changelogAsset?.browser_download_url) {
+            try {
+              const clResp = await fetch(changelogAsset.browser_download_url)
+              if (clResp.ok) {
+                const clText = await clResp.text()
+                if (clText && clText.trim()) detail = clText.trim()
+              }
+            } catch (_) { }
+          }
           return {
             ok: true,
             status: 'ok',
             title: `云端最新版本：${data.tag_name || ''}`,
-            detail: data.body || '已获取最新发布信息',
-            releaseUrl: data.html_url || 'https://github.com/Yun-Hydrogen/blue-random/releases/latest'
+            detail,
+            releaseUrl: data.html_url || 'https://github.com/Yun-Hydrogen/blue-random/releases/latest',
+            downloadUrl: exeAsset?.browser_download_url || '',
+            assetName: exeAsset?.name || 'BlueRandom.exe',
+            assetSize: exeAsset?.size || 0,
+            remoteTag: data.tag_name || ''
           }
         }
       } catch (_) { }
@@ -616,6 +634,59 @@ export function setupNativeBridgeAdapter() {
         title: '检查更新失败',
         detail: '无法连接到更新服务',
         releaseUrl: 'https://github.com/Yun-Hydrogen/blue-random/releases/latest'
+      }
+    },
+
+    /**
+     * 下载远端 Release 更新包（进度通过 window.__onUpdateDownloadProgress 推送）。
+     * @param {string} downloadUrl - Release 资产直链
+     * @param {number} [expectedSize=0] - 预期字节大小
+     * @returns {Promise<{ok: boolean, cancelled?: boolean, stagedPath?: string, bytes?: number, message?: string}>}
+     */
+    downloadUpdate: async (downloadUrl, expectedSize = 0) => {
+      try {
+        const b = getBridge()
+        if (!b || typeof b.DownloadUpdateJson !== 'function') {
+          return { ok: false, message: '当前环境不支持自动下载更新' }
+        }
+        const json = await b.DownloadUpdateJson(String(downloadUrl || ''), Number(expectedSize) || 0)
+        return JSON.parse(json || '{}')
+      } catch (e) {
+        console.error('[Bridge] downloadUpdate 失败', e)
+        return { ok: false, message: e?.message || '下载更新失败' }
+      }
+    },
+
+    /**
+     * 取消正在进行的更新包下载。
+     */
+    cancelUpdateDownload: async () => {
+      try {
+        const b = getBridge()
+        if (b && typeof b.CancelUpdateDownload === 'function') {
+          await b.CancelUpdateDownload()
+        }
+      } catch (e) {
+        console.error('[Bridge] cancelUpdateDownload 失败', e)
+      }
+    },
+
+    /**
+     * 应用已下载的更新包并自动替换重启。
+     * @param {string} stagedPath - 临时目录中的更新包路径
+     * @returns {Promise<{ok: boolean, message?: string}>}
+     */
+    applyDownloadedUpdate: async (stagedPath) => {
+      try {
+        const b = getBridge()
+        if (!b || typeof b.ApplyDownloadedUpdateJson !== 'function') {
+          return { ok: false, message: '当前环境不支持自动替换更新' }
+        }
+        const json = await b.ApplyDownloadedUpdateJson(String(stagedPath || ''))
+        return JSON.parse(json || '{}')
+      } catch (e) {
+        console.error('[Bridge] applyDownloadedUpdate 失败', e)
+        return { ok: false, message: e?.message || '应用更新失败' }
       }
     },
 

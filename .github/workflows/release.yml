@@ -95,10 +95,8 @@ jobs:
       - name: Package Single-File Release and Changelog
         shell: pwsh
         run: |
-          $code = "${{ steps.meta.outputs.codename }}"
-          $ver = "${{ steps.meta.outputs.version }}"
           New-Item -ItemType Directory -Force -Path publish\out | Out-Null
-          $targetExe = "publish\out\BlueRandom-$code-v$ver-win-x64.exe"
+          $targetExe = "publish\out\BlueRandom.exe"
           Copy-Item "publish\release\BlueRandom.exe" $targetExe
           Copy-Item "changelog.md" "publish\out\changelog.md"
           Write-Host "Prepared package: $targetExe and changelog.md"
@@ -119,5 +117,5 @@ jobs:
           draft: ${{ github.event.inputs.draft == 'true' }}
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           files: |
-            publish/out/BlueRandom-*.exe
+            publish/out/BlueRandom.exe
             changelog.md

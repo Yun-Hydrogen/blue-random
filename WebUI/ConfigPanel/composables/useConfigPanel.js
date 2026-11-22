@@ -585,14 +585,18 @@ export function useConfigPanel() {
   const updateTitle = ref('')
   const updateDetail = ref('')
   const updateReleaseUrl = ref('')
+  const updateDownloadUrl = ref('')
+  const updateAssetName = ref('')
+  const updateAssetSize = ref(0)
+  const updateRemoteTag = ref('')
 
   /*
    * checkUpdate() —— 检查 GitHub Releases 是否有新版本
    *
    * 流程：
    *   1. 设置 loading = true，清空之前的结果
-   *   2. 调用主进程 checkUpdate（IPC → update.js → GitHub API）
-   *   3. 主进程返回 { status, title, detail, releaseUrl }
+   *   2. 调用主进程 checkUpdate（IPC → UpdateService → GitHub API / 302 探针）
+   *   3. 主进程返回 { status, title, detail, releaseUrl, downloadUrl, assetName, assetSize, remoteTag }
    *   4. 更新对应的 ref，loading = false
    */
   async function checkUpdate() {
@@ -601,18 +605,26 @@ export function useConfigPanel() {
     updateTitle.value = ''
     updateDetail.value = ''
     updateReleaseUrl.value = ''
+    updateDownloadUrl.value = ''
+    updateAssetName.value = ''
+    updateAssetSize.value = 0
+    updateRemoteTag.value = ''
     const r = await window.configPanelApi?.checkUpdate()
     updateLoading.value = false
     if (r) {
       updateStatus.value = r.status || ''
       updateTitle.value = r.title || ''
       updateDetail.value = r.detail || ''
-      /* 若返回的 detail 为空，回退读取本地 changelog.md */
-      if (!updateDetail.value && window.configPanelApi?.getChangelog) {
+      /* 仅在非新版本/非错误状态下，若 detail 为空才回退读取本地 changelog.md */
+      if (!updateDetail.value && r.status !== 'update' && r.status !== 'error' && window.configPanelApi?.getChangelog) {
         updateDetail.value = await window.configPanelApi.getChangelog()
       }
       /* 兜底：未返回 releaseUrl 时仍给出 Releases 最新页（“无论是否有更新均可跳转”） */
       updateReleaseUrl.value = r.releaseUrl || 'https://github.com/Yun-Hydrogen/blue-random/releases/latest'
+      updateDownloadUrl.value = r.downloadUrl || ''
+      updateAssetName.value = r.assetName || ''
+      updateAssetSize.value = Number(r.assetSize) || 0
+      updateRemoteTag.value = r.remoteTag || ''
     }
   }
 
@@ -915,6 +927,10 @@ export function useConfigPanel() {
     updateTitle,
     updateDetail,
     updateReleaseUrl,
+    updateDownloadUrl,
+    updateAssetName,
+    updateAssetSize,
+    updateRemoteTag,
     checkUpdate,
 
     /* ---- 关闭 & 应用 ---- */
