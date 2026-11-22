@@ -84,12 +84,12 @@
 - 除项目 **/Resources/** 下的图片和音效资源，项目使用 **AGPLv3** 许可证。
 - 项目 **/Resources/** 下的图片和音效资源由各自版权方所有，使用时请注意授权和范围。
 - 背景音乐与抽取音效为版权资源，**不随仓库分发**；请用户自行准备，上传后存储于本地 customs/ 目录。
-- UiAccess.dll 来自 [RunUIAccess](https://github.com/shc0743/RunUIAccess)，使用 MIT 协议 [License](/THIRD_PARTY_NOTICES/RunUIAccess-MIT.txt)
+- UiAccess.dll 来自 [RunUIAccess](https://github.com/shc0743/RunUIAccess)，使用 MIT 协议 [License](/third_party/RunUIAccess-MIT.txt)
 
 ## 第三方资源版权归属
 
 ```
-public
+Resources
   ├─fonts
   │    ├─UI.ttf 南西新圆体 IPA Font License
   │      

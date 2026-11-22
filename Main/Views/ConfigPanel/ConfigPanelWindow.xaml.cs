@@ -39,6 +39,11 @@ public partial class ConfigPanelWindow : Window
     public Task EnsureReadyAsync() => _browserHost.EnsureReadyAsync();
 
     /// <summary>
+    /// 向前端推送更新包下载进度 JSON。
+    /// </summary>
+    internal Task PushUpdateProgressAsync(string progressJson) => _browserHost.PushUpdateProgressAsync(progressJson);
+
+    /// <summary>
     /// 窗体关闭拦截钩子。
     /// 取消实际销毁操作，改为直接隐藏窗体（Hide），以保持 WebView2 渲染上下文实现秒开体验。
     /// </summary>

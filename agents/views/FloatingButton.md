@@ -43,18 +43,20 @@
   - **返回值** (`void`)。
 - **4. 注意事项**:
   - 设有 4 像素移动死区阈值，位移小于 4 像素时仅判定为单次点击，绝不误触拖拽。
-  - `DragMove()` 在用户松手后返回，紧接着调用 `ClampPosition()` 依据当前屏幕 `SystemParameters.WorkArea` 执行边距补偿吸附，让圆形主按钮 100% 紧贴屏幕物理边缘，并广播 `PositionChanged` 事件完成防抖持久化。
+  - `DragMove()` 在用户松手后返回，紧接着调用 `ClampPosition()` 依据当前屏幕 `SystemParameters.WorkArea` 执行边距补偿吸附，让圆形主按钮 100% 紧贴屏幕物理边缘，并发送 `[Post] @Fcb.PositionChanged` 事件完成防抖持久化。
 
 ---
 
 ### 4. 触控输入原生适配与手势屏蔽 (`OnMainButtonTouchDown/Move/Up` / `Stylus`)
-- **1. 标题**: 触控原生拖拽适配与系统手势拦截
-- **2. 用途**: 在教学一体机、触控平板或手写屏上提供丝滑的手指拖动体验，彻底杜绝 Windows 触控长按水波纹与边缘轻扫手势干扰。
+- **1. 标题**: 触控独立交互、防鼠标提升与系统手势拦截
+- **2. 用途**: 在教学一体机、触控平板或手写屏上提供独立的触控点击与平滑拖拽体验，彻底杜绝 Windows 触控长按水波纹、边缘轻扫手势干扰以及 WPF 触控提升为鼠标事件导致的二次触发。
 - **3. 参数**:
-  - `TouchEventArgs`: 原生触摸事件，在触控移动超过 4 像素阈值时无缝衔接原生 `DragMove()`。
+  - `TouchEventArgs`: 原生触摸事件，在 `TouchDown` / `TouchMove` / `TouchUp` 中统一标记 `e.Handled = true` 并通过 `CaptureTouch` 锁定单指触点；位移超过 4 像素阈值时直接按 DIP 增量更新窗口坐标并调用 `ClampPosition()`，抬起后上报 `PositionChanged`。
+  - `IsTouchPromotedMouseEvent`: 在 `MouseDown` / `MouseMove` / `MouseUp` 入口过滤 `e.StylusDevice?.TabletDevice?.Type == TabletDeviceType.Touch`，作为双重防重保护（同时保留手写笔/鼠标正常交互）。
   - **返回值** (`void`)。
 - **4. 注意事项**:
-  - 在初始化时显式调用 `Stylus.SetIsPressAndHoldEnabled(MainButtonBorder, false)` 与 `Stylus.SetIsFlicksEnabled(this, false)`，禁止系统在长按或拖拽悬浮球时弹出右键动画圆圈。
+  - 在初始化时显式调用 `Stylus.SetIsPressAndHoldEnabled(MainButtonBorder, false)`、`Stylus.SetIsFlicksEnabled(this, false)`、`Stylus.SetIsTapFeedbackEnabled(this, false)` 与 `Stylus.SetIsTouchFeedbackEnabled(this, false)`，禁止系统在长按或轻触悬浮球时弹出右键动画圆圈与触控反馈。
+  - 触控拖拽不调用 `DragMove()`（避免依赖 `Mouse.LeftButton == Pressed` 及触发 Windows 11 Snap 贴靠），而是通过 `TransformFromDevice` 将屏幕坐标换算为 DIP 增量直接移动窗口。
 
 ---
 

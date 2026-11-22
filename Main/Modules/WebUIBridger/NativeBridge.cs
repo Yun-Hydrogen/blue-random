@@ -11,6 +11,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Win32;
@@ -26,6 +27,8 @@ namespace BlueRandom.Modules.WebUIBridger;
 public class NativeBridge
 {
     private readonly Window _hostWindow;
+    private readonly object _updateLock = new();
+    private CancellationTokenSource? _updateDownloadCts;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -341,6 +344,87 @@ public class NativeBridge
     {
         var result = await UpdateService.CheckUpdateAsync();
         return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    /// <summary>
+    /// 异步下载远端 Release 更新包并实时向前端推送下载进度。
+    /// </summary>
+    public async Task<string> DownloadUpdateJson(string downloadUrl, double expectedSize)
+    {
+        CancellationTokenSource cts;
+        lock (_updateLock)
+        {
+            _updateDownloadCts?.Cancel();
+            _updateDownloadCts?.Dispose();
+            _updateDownloadCts = new CancellationTokenSource();
+            cts = _updateDownloadCts;
+        }
+
+        try
+        {
+            long expectedBytes = expectedSize > 0 ? (long)expectedSize : 0;
+            var result = await UpdateService.DownloadUpdateAsync(
+                downloadUrl,
+                expectedBytes,
+                progress => ReportUpdateProgress(progress),
+                cts.Token);
+            return JsonSerializer.Serialize(result, JsonOptions);
+        }
+        finally
+        {
+            lock (_updateLock)
+            {
+                if (ReferenceEquals(_updateDownloadCts, cts))
+                {
+                    _updateDownloadCts.Dispose();
+                    _updateDownloadCts = null;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 取消正在进行的更新包下载。
+    /// </summary>
+    public void CancelUpdateDownload()
+    {
+        lock (_updateLock)
+        {
+            _updateDownloadCts?.Cancel();
+        }
+    }
+
+    /// <summary>
+    /// 启动更新替换脚本并退出当前进程以完成自动替换重启。
+    /// </summary>
+    public string ApplyDownloadedUpdateJson(string stagedPath)
+    {
+        var res = UpdateService.LaunchSelfUpdate(stagedPath);
+        if (res.Ok)
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(120);
+                try { IpcBroker.Send(IpcMessage.Create(IpcAction.Destroy, IpcModule.Ipc, "Destroy")); } catch { }
+                try { TrayService.Dispose(); } catch { }
+                Environment.Exit(0);
+            });
+        }
+        return JsonSerializer.Serialize(res, JsonOptions);
+    }
+
+    private void ReportUpdateProgress(UpdateDownloadProgress progress)
+    {
+        if (_hostWindow is not ConfigPanelWindow cp) return;
+        string json = JsonSerializer.Serialize(progress, JsonOptions);
+        try
+        {
+            cp.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _ = cp.PushUpdateProgressAsync(json);
+            }));
+        }
+        catch { }
     }
 
     /// <summary>

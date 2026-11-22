@@ -65,11 +65,8 @@ jobs:
       - name: Prepare CI Output
         shell: pwsh
         run: |
-          $json = Get-Content package.json -Raw | ConvertFrom-Json
-          $ver = $json.version
-          $code = if ($json.codename) { $json.codename } else { "Dev" }
           New-Item -ItemType Directory -Force -Path publish\out | Out-Null
-          $targetExe = "publish\out\BlueRandom-$code-v$ver-CI-win-x64.exe"
+          $targetExe = "publish\out\BlueRandom.exe"
           Copy-Item "publish\ci\BlueRandom.exe" $targetExe
           if (Test-Path changelog.md) {
             Copy-Item "changelog.md" "publish\out\changelog.md"

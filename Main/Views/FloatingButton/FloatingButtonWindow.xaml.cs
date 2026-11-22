@@ -78,8 +78,14 @@ public partial class FloatingButtonWindow : Window
 
     private readonly FloatingButtonController _controller;
     private Point _mouseDownScreenPos;
-    private bool _isPressed = false;
-    private bool _hasDragged = false;
+    private bool _isMousePressed = false;
+    private bool _hasMouseDragged = false;
+    private int? _activeTouchId = null;
+    private Point _touchDownScreenPos;
+    private Point _touchStartWindowPos;
+    private bool _isTouchPressed = false;
+    private bool _hasTouchDragged = false;
+    private int _pickerAnimVersion = 0;
     private bool _isRealClose = false;
     private SoundPlayer? _clickSoundPlayer;
 
@@ -133,6 +139,11 @@ public partial class FloatingButtonWindow : Window
         Deactivated += (_, _) =>
         {
             if (_controller.IsPickerOpen) TogglePicker(false);
+        };
+
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible) ResetPointerStates();
         };
 
         try
@@ -513,14 +524,57 @@ public partial class FloatingButtonWindow : Window
     }
 
     // ========================================================================
-    //  拖拽与点击交互 (原生平滑 DragMove，通过 WS_EX_TOOLWINDOW 与尺寸锁定禁用左右分屏)
+    //  拖拽与点击交互 (鼠标走原生 DragMove；触控独立处理并阻断向鼠标事件提升)
     // ========================================================================
+
+    private static bool IsTouchPromotedMouseEvent(MouseEventArgs e)
+        => e.StylusDevice?.TabletDevice?.Type == TabletDeviceType.Touch;
+
+    private void ResetPointerStates()
+    {
+        _isMousePressed = false;
+        _hasMouseDragged = false;
+        _isTouchPressed = false;
+        _hasTouchDragged = false;
+        _activeTouchId = null;
+    }
+
+    private Point GetScreenDipPosition(Point windowRelativeDip)
+    {
+        try
+        {
+            Point screenPx = PointToScreen(windowRelativeDip);
+            var source = PresentationSource.FromVisual(this);
+            if (source?.CompositionTarget != null)
+            {
+                return source.CompositionTarget.TransformFromDevice.Transform(screenPx);
+            }
+            return screenPx;
+        }
+        catch
+        {
+            return new Point(Left + windowRelativeDip.X, Top + windowRelativeDip.Y);
+        }
+    }
+
+    private void SendPositionChanged()
+    {
+        var payload = new FcbPositionPayload
+        {
+            MonitorNumber = 0,
+            PositionX = (int)Left,
+            PositionY = (int)Top
+        };
+        IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Fcb, "PositionChanged", payload));
+    }
 
     /// <summary>
     /// 鼠标左键按下事件：记录屏幕绝对坐标起点，准备拖拽或点击判定。
     /// </summary>
     private void OnMainButtonMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (IsTouchPromotedMouseEvent(e)) return;
+
         if (e.ChangedButton == MouseButton.Left)
         {
             try
@@ -531,8 +585,8 @@ public partial class FloatingButtonWindow : Window
             {
                 _mouseDownScreenPos = new Point(Left, Top);
             }
-            _isPressed = true;
-            _hasDragged = false;
+            _isMousePressed = true;
+            _hasMouseDragged = false;
         }
     }
 
@@ -541,7 +595,9 @@ public partial class FloatingButtonWindow : Window
     /// </summary>
     private void OnMainButtonMouseMove(object sender, MouseEventArgs e)
     {
-        if (_isPressed && e.LeftButton == MouseButtonState.Pressed)
+        if (IsTouchPromotedMouseEvent(e)) return;
+
+        if (_isMousePressed && e.LeftButton == MouseButtonState.Pressed)
         {
             Point currentScreenPos;
             try
@@ -553,9 +609,9 @@ public partial class FloatingButtonWindow : Window
                 return;
             }
 
-            if (!_hasDragged && (Math.Abs(currentScreenPos.X - _mouseDownScreenPos.X) > 4 || Math.Abs(currentScreenPos.Y - _mouseDownScreenPos.Y) > 4))
+            if (!_hasMouseDragged && (Math.Abs(currentScreenPos.X - _mouseDownScreenPos.X) > 4 || Math.Abs(currentScreenPos.Y - _mouseDownScreenPos.Y) > 4))
             {
-                _hasDragged = true;
+                _hasMouseDragged = true;
                 if (_controller.IsPickerOpen) TogglePicker(false);
                 try
                 {
@@ -566,15 +622,9 @@ public partial class FloatingButtonWindow : Window
                     AppLogger.Warn("FCB", "DragMove 异常: " + ex.Message);
                 }
 
-                _isPressed = false;
+                _isMousePressed = false;
                 ClampPosition();
-                var payload = new FcbPositionPayload
-                {
-                    MonitorNumber = 0,
-                    PositionX = (int)Left,
-                    PositionY = (int)Top
-                };
-                IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Fcb, "PositionChanged", payload));
+                SendPositionChanged();
             }
         }
     }
@@ -584,93 +634,109 @@ public partial class FloatingButtonWindow : Window
     /// </summary>
     private void OnMainButtonMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (IsTouchPromotedMouseEvent(e)) return;
+
         if (e.ChangedButton == MouseButton.Left)
         {
-            _isPressed = false;
-            if (!_hasDragged)
+            bool wasPressed = _isMousePressed;
+            bool hasDragged = _hasMouseDragged;
+            _isMousePressed = false;
+            _hasMouseDragged = false;
+
+            if (wasPressed && !hasDragged)
             {
                 // 未发生位移，判定为单次点击：展开或收起选择器
                 PlayClickSound();
                 TogglePicker(!_controller.IsPickerOpen);
             }
-            _hasDragged = false;
         }
     }
 
     /// <summary>
-    /// 触控按下事件：记录屏幕绝对坐标起点，准备触控拖拽或点击判定。
+    /// 触控按下事件：捕获触点并标记 Handled，阻止 WPF 将触控提升为鼠标事件导致二次触发。
     /// </summary>
     private void OnMainButtonTouchDown(object? sender, TouchEventArgs e)
     {
+        e.Handled = true;
+        if (_activeTouchId != null) return;
+
         var touchPoint = e.GetTouchPoint(this);
-        try
-        {
-            _mouseDownScreenPos = PointToScreen(touchPoint.Position);
-        }
-        catch
-        {
-            _mouseDownScreenPos = new Point(Left, Top);
-        }
-        _isPressed = true;
-        _hasDragged = false;
+        _activeTouchId = e.TouchDevice.Id;
+        _touchDownScreenPos = GetScreenDipPosition(touchPoint.Position);
+        _touchStartWindowPos = new Point(Left, Top);
+        _isTouchPressed = true;
+        _hasTouchDragged = false;
+        MainButtonBorder.CaptureTouch(e.TouchDevice);
     }
 
     /// <summary>
-    /// 触控移动事件：超过 4 像素移动阈值时触发原生拖拽，松手后贴紧边缘上报坐标。
+    /// 触控移动事件：超过 4 像素移动阈值时直接按 DIP 增量平滑移动窗口并贴紧工作区边界。
     /// </summary>
     private void OnMainButtonTouchMove(object? sender, TouchEventArgs e)
     {
-        if (_isPressed)
+        if (!_isTouchPressed || _activeTouchId != e.TouchDevice.Id) return;
+        e.Handled = true;
+
+        var touchPoint = e.GetTouchPoint(this);
+        Point currentScreenPos = GetScreenDipPosition(touchPoint.Position);
+        double dx = currentScreenPos.X - _touchDownScreenPos.X;
+        double dy = currentScreenPos.Y - _touchDownScreenPos.Y;
+
+        if (!_hasTouchDragged && (Math.Abs(dx) > 4 || Math.Abs(dy) > 4))
         {
-            var touchPoint = e.GetTouchPoint(this);
-            Point currentScreenPos;
-            try
-            {
-                currentScreenPos = PointToScreen(touchPoint.Position);
-            }
-            catch
-            {
-                return;
-            }
+            _hasTouchDragged = true;
+            if (_controller.IsPickerOpen) TogglePicker(false);
+        }
 
-            if (!_hasDragged && (Math.Abs(currentScreenPos.X - _mouseDownScreenPos.X) > 4 || Math.Abs(currentScreenPos.Y - _mouseDownScreenPos.Y) > 4))
-            {
-                _hasDragged = true;
-                if (_controller.IsPickerOpen) TogglePicker(false);
-                try
-                {
-                    DragMove();
-                }
-                catch (Exception ex)
-                {
-                    AppLogger.Warn("FCB", "Touch DragMove 异常: " + ex.Message);
-                }
-
-                _isPressed = false;
-                ClampPosition();
-                var payload = new FcbPositionPayload
-                {
-                    MonitorNumber = 0,
-                    PositionX = (int)Left,
-                    PositionY = (int)Top
-                };
-                IpcBroker.Send(IpcMessage.Create(IpcAction.Post, IpcModule.Fcb, "PositionChanged", payload));
-            }
+        if (_hasTouchDragged)
+        {
+            Left = _touchStartWindowPos.X + dx;
+            Top = _touchStartWindowPos.Y + dy;
+            ClampPosition();
         }
     }
 
     /// <summary>
-    /// 触控抬起事件：若未发生移动，则判定为单击交互并切换选择器展开状态。
+    /// 触控抬起事件：标记 Handled 阻断鼠标提升；未拖拽时切换选择器展开状态，拖拽后上报新坐标。
     /// </summary>
     private void OnMainButtonTouchUp(object? sender, TouchEventArgs e)
     {
-        _isPressed = false;
-        if (!_hasDragged)
+        if (!_isTouchPressed || _activeTouchId != e.TouchDevice.Id) return;
+        e.Handled = true;
+        FinishTouchInteraction(e.TouchDevice, isCancel: false);
+    }
+
+    /// <summary>
+    /// 触控捕获意外丢失时清理状态；若已发生拖拽则收敛位置并上报。
+    /// </summary>
+    private void OnMainButtonLostTouchCapture(object? sender, TouchEventArgs e)
+    {
+        if (!_isTouchPressed || _activeTouchId != e.TouchDevice.Id) return;
+        FinishTouchInteraction(e.TouchDevice, isCancel: true);
+    }
+
+    private void FinishTouchInteraction(TouchDevice touchDevice, bool isCancel)
+    {
+        bool hasDragged = _hasTouchDragged;
+        _isTouchPressed = false;
+        _hasTouchDragged = false;
+        _activeTouchId = null;
+
+        if (Equals(touchDevice.Captured, MainButtonBorder))
+        {
+            MainButtonBorder.ReleaseTouchCapture(touchDevice);
+        }
+
+        if (hasDragged)
+        {
+            ClampPosition();
+            SendPositionChanged();
+        }
+        else if (!isCancel)
         {
             PlayClickSound();
             TogglePicker(!_controller.IsPickerOpen);
         }
-        _hasDragged = false;
     }
 
     /// <summary>
@@ -702,6 +768,7 @@ public partial class FloatingButtonWindow : Window
     internal void TogglePicker(bool open)
     {
         _controller.IsPickerOpen = open;
+        int version = ++_pickerAnimVersion;
         if (open)
         {
             PickerCapsule.Visibility = Visibility.Visible;
@@ -759,6 +826,7 @@ public partial class FloatingButtonWindow : Window
 
             fadeOut.Completed += (_, _) =>
             {
+                if (version != _pickerAnimVersion) return;
                 PickerCapsule.Visibility = Visibility.Collapsed;
                 BtnCancel.Visibility = Visibility.Collapsed;
                 BtnConfirm.Visibility = Visibility.Collapsed;
